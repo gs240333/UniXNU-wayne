@@ -1,0 +1,107 @@
+name: Build kernel
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'board.toml'
+      - 'configs/**'
+      - 'dts/**'
+      - 'patches/**'
+      - 'package/**'
+      - '.github/workflows/kernel.yml'
+
+env:
+  HOMEBREW_NO_AUTO_UPDATE: 1
+  HOMEBREW_NO_INSTALL_CLEANUP: 1
+  HOMEBREW_NO_ENV_HINTS: 1
+
+jobs:
+  kernel:
+    runs-on: macos-26
+    timeout-minutes: 180
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+      DEFCONFIG: wayne_defconfig
+    steps:
+      - name: Check out UniXNU
+        uses: actions/checkout@v4
+        with:
+          repository: UniXNU/UniXNU
+          path: UniXNU
+          submodules: recursive
+
+      - name: Check out this device repository
+        uses: actions/checkout@v4
+        with:
+          path: device
+
+      - name: Check out the SDM660 SoC repository
+        uses: actions/checkout@v4
+        with:
+          repository: gs240333/UniXNU-sdm660-common
+          path: UniXNU-sdm660-common
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install host tools
+        run: |
+          brew install llvm lld mtools dtc unifdef
+          echo "$(brew --prefix llvm)/bin" >> "$GITHUB_PATH"
+          echo "$(brew --prefix unifdef)/bin" >> "$GITHUB_PATH"
+
+      - name: Report the runner toolchain
+        run: |
+          sw_vers
+          uname -m
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
+          python3 --version
+          for tool in git make clang cmake ninja unifdef ld.lld dtc xcodebuild; do
+            printf '%-10s %s\n' "$tool" "$(command -v "$tool" || echo MISSING)"
+          done
+
+      - name: Select the device and fetch sources
+        working-directory: UniXNU
+        run: |
+          cat > ../device/local.toml <<'EOF'
+          [[source]]
+          kind = "soc"
+          name = "sdm660"
+          local = "../UniXNU-sdm660-common"
+          EOF
+          chmod +x unixnu
+          ./unixnu defconfig "$DEFCONFIG" -D ../device
+          ./unixnu fetch -D ../device
+          ./unixnu status --json -D ../device | tee /tmp/status.json
+
+      - name: Assemble the build tree
+        working-directory: UniXNU
+        run: ./unixnu tree -D ../device
+
+      - name: Build the kernel
+        working-directory: UniXNU
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          SDKROOT="$(xcrun --sdk iphoneos --show-sdk-path)" ./unixnu build kernel -D ../device
+
+      - name: Collect outputs
+        if: always()
+        run: |
+          OUT=$(python3 -c "import json;print(json.load(open('/tmp/status.json'))['output'])")
+          echo "output=$OUT" >> "$GITHUB_ENV"
+          mkdir -p artifact
+          cp -v "$OUT/kernel/kernel.macho" artifact/ 2>/dev/null || true
+          cp -rv "$OUT/logs" artifact/logs 2>/dev/null || true
+          ls -la artifact
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: wayne-kernel
+          path: artifact/**
+          if-no-files-found: warn
