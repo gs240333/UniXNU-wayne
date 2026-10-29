@@ -1,0 +1,11 @@
+#
+# SDM660 platform support.
+#
+# There is no upstream UniXNU SoC repository for SDM660, so this board pins its
+# own SoC repository. Update the commit when the SoC repository changes.
+#
+[[source]]
+kind = "soc"
+name = "sdm660"
+git = "https://github.com/gs240333/UniXNU-sdm660-common.git"
+commit = "0d8bd33304c171683009189a48c2dbf3a50c51d6"

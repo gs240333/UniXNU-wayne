@@ -1,0 +1,6 @@
+# Required firmware inputs: relative path | source | SHA-256 | consumer
+#
+# wayne has no board-specific firmware files in the first stage: the display
+# panel is left initialized by the bootloader (cont_splash at 0x9D400000), the
+# eMMC is driven by the firmware's SdccDxe, and no DSP/GPU/Wi-Fi blob is used.
+# Entries are added here as those subsystems come up.

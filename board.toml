@@ -1,0 +1,74 @@
+schema_version = 2
+
+[board]
+name = "wayne"
+soc = "SDM660"
+soc_source = "sdm660"
+os_profile = "ipados-17.7.11-21H461"
+description = "Xiaomi MI 6X"
+kit = "wayne"
+
+#
+# Stage 1 selection: no native storage driver yet. RamBlock publishes a RAM-backed
+# block device so the kernel can reach userspace without an eMMC driver, and the
+# firmware's GOP (ABL splash buffer) is handed to XNU through GopFramebuffer.
+#
+[components]
+include = ["ArmDTPlatform", "ArmCpu", "SoftwareAES", "RamBlock", "GopFramebuffer", "XnuPrelink", "DarwinBoot"]
+
+[kernel]
+defconfig = "wayne_defconfig"
+config_fragments = ["arch:configs/common.config", "soc:configs/sdm660.config", "os:configs/ipados.config"]
+archives = [
+  "build-corecrypto-14.py",
+  "build-corecrypto-14.py --namespace",
+  "component:ArmDTPlatform",
+  "component:ArmCpu",
+  "component:SoftwareAES",
+  "build-software-aes-bindings.py",
+  "component:RamBlock",
+  "build-virtio-mmio-bindings.py --component RamBlock --directory build/ram-block",
+  "build-mockfs-fixture.py",
+  "build-libpthread-kernel.py",
+  "component:GopFramebuffer",
+  "build-gop-legacy-display.py",
+]
+patch_series = ["arch:patches/xnu/series", "soc:patches/xnu/series", "os:patches/xnu/series", "device:patches/xnu/series"]
+
+[device_tree]
+source = "device:dts/wayne.dts"
+
+[firmware]
+config = "wayne"
+dsc = "Platforms/Xiaomi/waynePkg/wayne.dsc"
+fd = "Build/waynePkg/{target}_CLANGPDB/FV/SILICIUM_UEFI.fd"
+submodules = ["Binaries", "Common/Mu", "Common/Mu_OEM_Sample", "Mu_Basecore", "Silicium-ACPI", "Silicon/Silicium/OpensslPkg/Library/OpensslLib/openssl"]
+packages = ["{uefi}", "{uefi}/Platforms/Xiaomi", "{tree}/package", "{tree}/drivers/DarwinBoot", "{edk2}", "{uefi}/Common/Mu", "{uefi}/Common/Mu_OEM_Sample", "{uefi}/Silicon/Qualcomm", "{uefi}/Silicon/Silicium", "{uefi}/Silicium-ACPI", "{uefi}/Silicium-ACPI/Platforms/Xiaomi", "{uefi}/Silicium-ACPI/Silicon/Qualcomm"]
+
+[firmware.defines]
+DEVICE_MODEL = "wayne"
+
+[bootimg.image]
+header_version = 0
+base = 0x00000000
+kernel_offset = 0x00008000
+ramdisk_offset = 0x01000000
+tags_offset = 0x00000100
+pagesize = 4096
+
+[payload]
+volume = "WAYNEESP"
+size_mib = 208
+loader = "firmware"
+title = "UniXNU"
+kernel_args = ["-v", "serial=3", "debug=0x14e"]
+
+[payload.adt]
+chip_id = "32785"
+unique_chip_id = "required"
+
+[userdata]
+first_lba = 14417920
+last_lba = 122142686
+lba_bytes = 512
+windows = [{ name = "OS", component = "OS" }, { name = "SystemOS", component = "Cryptex1,SystemOS" }]
