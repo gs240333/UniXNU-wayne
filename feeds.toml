@@ -8,4 +8,4 @@
 kind = "soc"
 name = "sdm660"
 git = "https://github.com/gs240333/UniXNU-sdm660-common.git"
-commit = "3c81d4185cdf2e180fd39de7e0926bf3eefad8ed"
+commit = "71766483007f47f584e95c1e867154475753190d"
