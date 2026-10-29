@@ -14,7 +14,7 @@ kit = "wayne"
 # firmware's GOP (ABL splash buffer) is handed to XNU through GopFramebuffer.
 #
 [components]
-include = ["ArmDTPlatform", "ArmCpu", "SoftwareAES", "RamBlock", "GopFramebuffer", "XnuPrelink", "DarwinBoot"]
+include = ["ArmDTPlatform", "ArmCpu", "SoftwareAES", "RamBlock", "XnuPrelink", "DarwinBoot"]
 
 [kernel]
 defconfig = "wayne_defconfig"
@@ -29,8 +29,6 @@ archives = [
   "component:RamBlock",
   "build-mockfs-fixture.py",
   "build-libpthread-kernel.py",
-  "component:GopFramebuffer",
-  "build-gop-legacy-display.py",
 ]
 patch_series = ["arch:patches/xnu/series", "soc:patches/xnu/series", "os:patches/xnu/series", "device:patches/xnu/series"]
 
