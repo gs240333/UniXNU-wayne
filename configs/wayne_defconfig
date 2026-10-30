@@ -31,5 +31,8 @@ CONFIG_XNU_NATIVE_UFS=n
 CONFIG_XNU_NATIVE_ADRENO=n
 CONFIG_XNU_NATIVE_MOBILE_DISPLAY=n
 CONFIG_XNU_SHENG_PMGR=y
+# The PMGR nub calls the board eMMC/input/power/DSP entry points; they are empty
+# until those drivers are ported, and a missing symbol fails the kernel link.
+CONFIG_XNU_EXTRA_LD_ARCHIVES="{tree}/build/wayne-board-stubs/libWayneBoardStubs.a"
 
 CONFIG_XNU_EXTRA_CFLAGS="-Wno-reserved-identifier -Wno-pre-c11-compat -Wno-missing-designated-field-initializers -Wno-suggest-override -Wno-suggest-destructor-override -Wno-ms-bitfield-padding"
