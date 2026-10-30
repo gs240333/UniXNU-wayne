@@ -1931,12 +1931,10 @@ static void prepareApfsBoot(IOMedia *whole)
   // the match dictionary never lands on it; publish the UUID on the window's
   // whole media as well, which is an IOMedia and is named by IOMediaBSDClient.
   {
-    OSString *uuidString = OSString::withCString(kRootVolumeUuid);
-    if (!uuidString || !whole->setProperty("UUID", uuidString)) {
-      OSSafeReleaseNULL(uuidString);
+    OSSharedPtr<OSString> uuidString = OSString::withCString(kRootVolumeUuid);
+    if (!uuidString || !whole->setProperty("UUID", uuidString.get())) {
       fail("uuidprop", 0);
     }
-    OSSafeReleaseNULL(uuidString);
     const char *wholeName = nullptr;
     uint32_t wholeMajor = 0xffffffff;
     uint32_t wholeMinor = 0xffffffff;
