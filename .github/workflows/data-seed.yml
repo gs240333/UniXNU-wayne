@@ -1,0 +1,73 @@
+name: Data seed
+
+# The third SHNGROOT window is the writable Data volume. The reference board
+# appends a 32 MiB APFS container after SystemOS and hands the owner mount its
+# UUID; the generator behind it is not published, so this builds the same shape
+# here and prints the volume UUID that has to go into CloverBlock.cpp.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  seed:
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the APFS Data volume
+        run: |
+          set -eux
+          # 32 MiB matches the reference window size.
+          hdiutil create -size 32m -fs APFS -volname Data -type UDIF -ov /tmp/data.dmg
+          hdiutil attach -readwrite -nobrowse -noautoopen /tmp/data.dmg
+          diskutil apfs list -plist > /tmp/apfs.plist
+          python3 - <<'PY'
+          import plistlib
+          data = plistlib.load(open('/tmp/apfs.plist', 'rb'))
+          for container in data.get('Containers', []):
+              for volume in container.get('Volumes', []):
+                  name = volume.get('Name', '?')
+                  uuid = volume.get('APFSVolumeUUID') or volume.get('VolumeUUID')
+                  capacity = volume.get('CapacityCeiling')
+                  print(f'volume {name} uuid={uuid} capacity={capacity}')
+          PY
+          diskutil info -plist /Volumes/Data > /tmp/info.plist || true
+          DEV=$(hdiutil info | awk '/\/tmp\/data.dmg/ {print $1}' | head -1)
+          echo "device: $DEV"
+          hdiutil detach "$DEV"
+
+      - name: Read the volume UUID
+        run: |
+          set -eux
+          hdiutil attach -nomount /tmp/data.dmg
+          diskutil apfs list -plist > /tmp/apfs2.plist
+          python3 - <<'PY' > /tmp/uuid.txt
+          import plistlib
+          data = plistlib.load(open('/tmp/apfs2.plist', 'rb'))
+          for container in data.get('Containers', []):
+              for volume in container.get('Volumes', []):
+                  if volume.get('Name') == 'Data':
+                      print((volume.get('APFSVolumeUUID') or volume.get('VolumeUUID') or '').upper())
+          PY
+          cat /tmp/uuid.txt
+          DEV=$(hdiutil info | awk '/\/tmp\/data.dmg/ {print $1}' | head -1)
+          RAW=$(echo "$DEV" | sed 's#/dev/disk#/dev/rdisk#')
+          dd if="$RAW" of="$GITHUB_WORKSPACE/data-seed.img" bs=1m count=32
+          hdiutil detach "$DEV"
+          ls -l "$GITHUB_WORKSPACE/data-seed.img"
+          echo "DATA_UUID=$(cat /tmp/uuid.txt)" >> "$GITHUB_ENV"
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "Data volume UUID: ${{ env.DATA_UUID }}" >> "$GITHUB_STEP_SUMMARY"
+          sha256sum data-seed.img >> "$GITHUB_STEP_SUMMARY" || true
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wayne-data-seed
+          path: data-seed.img
+          if-no-files-found: error
