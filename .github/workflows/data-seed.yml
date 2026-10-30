@@ -30,6 +30,8 @@ jobs:
                   print('dev:', entity['dev-entry'], 'mount:', entity.get('mount-point', ''))
           PY
           diskutil apfs list -plist > /tmp/apfs.plist
+          diskutil apfs list | tee /tmp/apfs.txt
+          diskutil info /Volumes/Data | tee /tmp/data.txt
           python3 - <<'PY'
           import plistlib
           data = plistlib.load(open('/tmp/apfs.plist', 'rb'))
