@@ -62,12 +62,7 @@ dram_size = "0x80000000"
 # Copied from the reference SDM660 port (UniXNU-clover): the same SoC, the same
 # eMMC, the same 2 GiB low bank. armcpu-timer-intid=19 is the SDM660 arch timer
 # PPI; boot-progress=2 and the offline-legacy-* set enable the patched boot path.
-entry_probe_reset_delay = 15
-entry_probe_reset_after = "_PE_init_cpu"
-entry_probe_reset_before = true
-entry_probe_reset_in = "_arm_init"
-entry_probe_reset_occurrence = 1
-panic_screen = false
+panic_screen = true
 kernel_args = [
   "-v",
   "debug=0x14e",
