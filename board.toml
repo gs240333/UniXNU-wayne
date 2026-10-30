@@ -61,7 +61,7 @@ title = "UniXNU"
 kernel_args = ["-v", "serial=3", "debug=0x14e", "keepsyms=1"]
 
 [payload.adt]
-chip_id = "32785"
+chip_id = "8011"
 unique_chip_id = "required"
 
 [userdata]
