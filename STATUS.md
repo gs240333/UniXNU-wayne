@@ -292,3 +292,29 @@ clover 仓库里 `append-data-window.py` 引用的 `scripts/prepare-owner-data-f
 
 同时要核对 `kSystemOsVolumeUuid`（clover 写死 `8846FE78-2910-4297-AF97-D59BB6F8FC16`）
 是否等于我们 SystemOS 卷的真实 UUID，不一致要回填。
+
+## 三个窗口全部通过（2026-10-30 16:10）
+
+真机 panic 序列：`root-magic` → `systemwin 1` → `datawin 2` → **全部消失**，
+回到 `Failed to mount root device @IOKitBSDInit.cpp:984`。
+
+说明：eMMC 读、GPT、SHNGROOT 清单、OS/SystemOS/Data 三个窗口的发布全部成功，
+`CloverBlock` 已经把卷交给 IOKit；剩下的是内核 root-matching 没选中卷。
+
+### 本阶段的关键做法
+
+- **sparse 刷写**：`fastboot`（37.0.1）会把整镜像读进内存，12GB 机器 `bad_alloc`；
+  **platform-tools 34.0.5** + Android sparse 格式可用。
+- **局部重刷**：用 `--keep START:SIZE` 只保留清单和新增窗口，其余块标 DONT_CARE，
+  增量刷写只要 32MB（`make-sparse.py`）。
+- **Data 窗口**：clover 的 seed 生成器未公开，用 CI（`data-seed.yml`）造 32MiB APFS 容器，
+  UUID 从 **卷超级块（APSB + 0xd0，紧跟其后 0xe0 是纳秒时间戳）** 读出，回填到
+  `CloverBlock.cpp` 的 `kDataVolumeUuid`。
+- **窗口附加**：`append-data-window.py` 改 wayne 的 MAX_BYTES 与 seed 常量后可用。
+
+### 下一步诊断 root 挂载
+
+1. 确认 CloverBlock 发布的 IOMedia 是否带 APFS 卷（需要内核日志或 boot-progress 层）。
+2. `kSystemOsVolumeUuid` 仍是 clover 的值（`8846FE78-…`），需核对我们 SystemOS 卷的真实 UUID。
+3. 可能需要 `native_ram_block_volume_seed()` 路径或 owner-mount 补丁（clover 的
+   `zzy-clover-owner-root-trust.patch` / `zzy-clover-systemos-mount.patch` 系列尚未移植）。
