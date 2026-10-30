@@ -1,4 +1,4 @@
-﻿// SPDX-License-Identifier: BSD-2-Clause-Patent
+// SPDX-License-Identifier: BSD-2-Clause-Patent
 // clover (Mi Pad 4, SDM660): the eMMC host driver, one question per boot argument.
 //
 // WHY THIS FILE EXISTS IN THIS SHAPE
@@ -254,7 +254,10 @@ static const uint32_t kLogfsLastLba = 12337151u;   // sysfs: start 12320768, 163
 // The Data partition as the unit numbers it (mmcblk0p64), from the same dump the logfs extent came
 // from: 106347199 sectors, ending 33 sectors short of the card so the backup GPT stays outside it.
 // Round128 puts the iPadOS root image here, so its entry is a window the way logfs's is.
-static const uint32_t kUserDataFirstLba = 15795488u;
+// wayne (MI 6X): userdata is mmcblk0p64 and starts at 0xdc0000, not the
+// reference board's 15795488. CloverBlock only publishes the window when this
+// boot's GPT agrees, and panics "udwindow 0" when it does not.
+static const uint32_t kUserDataFirstLba = 14417920u;
 static const uint32_t kUserDataLastLba = 122142686u;
 // Round185: the log window is a different partition from the root window. Everything this driver
 // writes for the host to read -- the panic report slots, the verdict ring, the kernel tee ring and
