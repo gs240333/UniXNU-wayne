@@ -64,8 +64,8 @@ panic_screen = false
 # entry_probe_reset_after the reset moves after the named call, so a reboot
 # answers "did the kernel get past this symbol?".
 entry_probe_reset_delay = 10
-entry_probe_reset_after = "_arm_vm_init"
-entry_probe_reset_in = "_arm_init"
+entry_probe_reset_after = "_bsd_init"
+entry_probe_reset_in = "_kernel_bootstrap"
 entry_probe_reset_occurrence = 1
 
 [payload.adt]
