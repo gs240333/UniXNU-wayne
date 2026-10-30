@@ -14,6 +14,9 @@ CONFIG_XNU_NATIVE_ARCH_TIMER=y
 CONFIG_XNU_TRUST_CACHE_RUNTIME=y
 CONFIG_XNU_NATIVE_CS_HASH_CACHE=y
 CONFIG_XNU_CRYPTO_BOOTSTRAP="prelinked"
+# Without this the base tree maps PLATFORM_PANIC_LOG_PADDR (0x3c0f0000) and
+# reads it, which is an unmapped window on SDM660: console init hangs there.
+CONFIG_XNU_DT_PANIC_REGION=y
 
 # Kryo 260 is ARMv8.0-A: PSTATE.PAN is not implemented.
 CONFIG_XNU_NATIVE_PAN=n
