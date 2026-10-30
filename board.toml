@@ -55,10 +55,10 @@ pagesize = 4096
 
 [payload]
 volume = "WAYNEESP"
-size_mib = 208
+size_mib = 54
 loader = "firmware"
 title = "UniXNU"
-kernel_args = ["-v", "serial=3", "debug=0x14e"]
+kernel_args = ["-v", "serial=3", "debug=0x14e", "keepsyms=1"]
 
 [payload.adt]
 chip_id = "32785"

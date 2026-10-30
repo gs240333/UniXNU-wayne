@@ -90,6 +90,33 @@ jobs:
         run: |
           SDKROOT="$(xcrun --sdk iphoneos --show-sdk-path)" ./unixnu build kernel -D ../device
 
+      - name: Build the payload
+        working-directory: UniXNU
+        run: |
+          ./unixnu build payload -D ../device --unique-chip-id 0x3b61b8fa
+          OUT=$(python3 -c "import json;print(json.load(open('/tmp/status.json'))['output'])")
+          ls -l "$OUT/payload"
+
+      - name: Fetch the firmware volume
+        run: |
+          mkdir -p fw
+          curl -fsSL -o fw/SILICIUM_UEFI.fd \
+            https://github.com/gs240333/Mu-Silicium/releases/download/wayne-latest/SILICIUM_UEFI.fd
+          ls -l fw/SILICIUM_UEFI.fd
+          git clone --depth 1 -q https://github.com/gs240333/Mu-Silicium.git mu-wayne
+          ls mu-wayne/Resources/Configs/wayne.toml
+
+      - name: Pack the boot image
+        working-directory: UniXNU
+        run: |
+          OUT=$(python3 -c "import json;print(json.load(open('/tmp/status.json'))['output'])")
+          ./unixnu bootimg -D ../device --uefi ../mu-wayne \
+            --fd ../fw/SILICIUM_UEFI.fd \
+            --dtb "$OUT/device-tree/hardware.dtb" \
+            -o ../boot.img
+          ls -l ../boot.img
+          cp "$OUT/payload/payload.img" ../payload.img
+
       - name: Collect outputs
         if: always()
         run: |
@@ -97,6 +124,8 @@ jobs:
           echo "output=$OUT" >> "$GITHUB_ENV"
           mkdir -p artifact
           cp -v "$OUT/kernel/kernel.macho" artifact/ 2>/dev/null || true
+          cp -v boot.img artifact/ 2>/dev/null || true
+          cp -v payload.img artifact/ 2>/dev/null || true
           cp -rv "$OUT/logs" artifact/logs 2>/dev/null || true
           ls -la artifact
 
