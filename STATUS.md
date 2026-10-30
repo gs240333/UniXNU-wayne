@@ -159,3 +159,33 @@ DARWINBOOT: inputs validated; exiting boot services
 3. 触摸（focaltech fts @0xc175000 addr 0x38）与 FRC/显示时序。
 4. 每轮都要注意：**不要写 boot 分区**，ABL 对未签名镜像会让机器进"拒绝启动"状态，
    恢复需要拔线断电。
+
+## 内核 bring-up 二分记录（真机，每行一次构建）
+
+参照对象：`qine233/UniXNU-clover`（同 SDM660 / 同 eMMC）。参数与 ADT 值已逐项照搬：
+`chip_id=0x13d`、`owned_memory_size=0x40000000`、`dram_size=0x80000000`（只用低 2GB）、
+`armcpu-timer-intid=19`、`boot-progress=2` 与 `offline-legacy-*` 全套。
+
+| 探针（`entry_probe_reset_*`） | 结果 | 结论 |
+| --- | --- | --- |
+| stage 3（MMU 打开后 10 s 复位） | **重启** | MMU 使能与页表 OK |
+| `--reset-after _arm_vm_init --in _arm_init` | **重启** | `arm_vm_init` 正常返回 |
+| `--reset-after _bsd_init --in _kernel_bootstrap_thread` | 不重启 | 未到 BSD 初始化 |
+| `--reset-before _bsd_init --in _kernel_bootstrap_thread` | 不重启 | 未到 `bsd_init` 调用点 |
+| `--reset-before _machine_startup --in _arm_init` | 不重启 | 未到 `machine_startup` 调用点 |
+| `--reset-before _PE_init_cpu --in _arm_init` | 不重启 | 卡在 `PE_init_cpu` **之前** |
+
+结论：卡点在 `arm_vm_init` 返回之后、`PE_init_cpu` 之前的两次调用里，即
+`PE_init_printf` 或第二次 `PE_init_platform`（`ArmDTPlatform` 的 configure）。
+下一步只需再两次构建即可定位到具体那一个。
+
+### 关键发现（来自 clover 源码注释，已照搬修复）
+
+- 上游 `ArmCpu` 把架构定时器中断固定为 **PPI 27**，而 SDM660 的设备树编号是
+  `16 + 3 = 19`（`CNTV_CTL_EL0`）。27 这条路永远不触发，所以计时器一次 tick 都不来。
+  `drivers/ArmCpu` 里的板级副本通过 `armcpu-timer-intid` 修正；当前**尚未选中**
+  （选中后 bootstrap pass 不产出 `startup.o.json`，见下）。
+- `panic_screen` 与 stage-4 探针**放不进**内核入口 padding（panic 屏 0xa1f 字节），
+  两者只能二选一。
+- UniXNU 的 `bootstrap pass` 会在链接处失败（mockfs 等符号未定义），这是**设计如此**，
+  只要 `startup.o.json` 生成就会被容错——不要把它当成构建错误。
