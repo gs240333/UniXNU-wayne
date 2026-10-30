@@ -65,8 +65,7 @@ jobs:
       - name: Read the APFS volumes
         working-directory: UniXNU
         run: |
-          OUT=$(./unixnu status --json -D ../device | python3 -c "import json,sys;print(json.load(sys.stdin)['output'])")
-          DMG=$(find "$(dirname "$OUT")" -path '*ipsw*' -name '044-76040-038.dmg' | head -1)
+          DMG=$(find . -name '044-76040-038.dmg' | head -1)
           echo "dmg: $DMG"
           hdiutil attach -readonly -nobrowse -noautoopen "$DMG" >/dev/null
           diskutil apfs list -plist > /tmp/apfs.plist
