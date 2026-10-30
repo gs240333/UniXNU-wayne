@@ -17464,7 +17464,10 @@
 
 	memory {
 		device_type = "memory";
-		reg = <0x00 0x80000000 0x00 0x80000000 0x01 0x00 0x00 0x7e4c0000>;
+		/* DDR is contiguous: bank 1 is 0x80000000..0x100000000 and bank 2
+		 * starts exactly there, so the two stock ranges are published as one
+		 * 0xfe4c0000-byte range. The ADT handoff accepts a single range. */
+		reg = <0x00 0x80000000 0x00 0xfe4c0000>;
 	};
 
 	psci {
