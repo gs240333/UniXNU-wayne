@@ -67,6 +67,22 @@ jobs:
         working-directory: UniXNU
         run: ./unixnu ipsw info -D ../device
 
+      - name: Prefer the pure-python UDIF reader
+        working-directory: UniXNU
+        run: |
+          # hdiutil attach + /dev/rdiskN reads raise EINVAL on this IPSW's
+          # images, so take the UDIF reader the same module already ships.
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('scripts/unixnu/userdata.py')
+          t = p.read_text()
+          old = "    if platform.system() != 'Darwin':\n        yield from udif.Image(dmg).blocks()"
+          new = "    if True:\n        yield from udif.Image(dmg).blocks()"
+          if old not in t:
+              raise SystemExit('disk_blocks guard not found; update this patch')
+          p.write_text(t.replace(old, new))
+          PY
+
       - name: Check the userdata image
         working-directory: UniXNU
         run: |
