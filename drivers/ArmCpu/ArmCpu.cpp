@@ -1,8 +1,4 @@
-﻿// SPDX-License-Identifier: BSD-2-Clause-Patent
-// Board copy of the ArmCpu submodule (UniXNU/ArmCpu.git @ 1951cc8444b340d7d8879e9418220cf29eb711d7, file sha256
-// 3c87b3bd617be5582a6a24ff797c359497ee9feaa702ee883ecee4270db21c9f). feeds.py resolves a device-repository module
-// before the base one, so this directory is what out/clover/tree/drivers/ArmCpu links to. Two changes, both behind
-// boot-args and both inert without them, are marked `clover change` below.
+// SPDX-License-Identifier: BSD-2-Clause-Patent
 #include <IOKit/IOCPU.h>
 #include <IOKit/IODeviceTreeSupport.h>
 #include <IOKit/IOMemoryDescriptor.h>
@@ -14,9 +10,6 @@
 // Exact private entry from Darwin 23 arm/rtclock.h. Its full data header is
 // not exported to IOKit; the IRQ path calls the real kernel implementation.
 extern "C" void rtclock_intr (unsigned int);
-// Round210: the storage driver's flight beat. This is the one clock that outlives the block layer,
-// so CPU0's tick is where the controller gets sampled when nothing else is running.
-extern "C" void clover_emmc_flight_beat (void);
 // Kernel-internal entries used for secondary CPU startup (Darwin 23 osfmk).
 extern "C" vm_offset_t ml_static_vtop (vm_offset_t);
 extern "C" char LowResetVectorBase[], LowResetVectorEnd[], ResetHandlerData[], const_boot_args[];
@@ -93,43 +86,13 @@ public:
 
 OSDefineMetaClassAndStructors (ArmCpu, IOCPU)
 
-// Redistributor ISENABLER0: SGIs 0..15 (only SGI 0 is used by the kernel; the others let the self-SGI probe tell which INTIDs the GIC accepts) and the
-// PPI the timer interrupt is taken from.
-//
-// clover change (boot-arg armcpu-timer-intid, default 27 = the base driver's behaviour): 27 and 19 are the *same source*, the non-secure EL1
-// virtual timer, under the two device-tree PPI numberings Snapdragon trees use: older ones (dodge.dts:7290, same tree) list PPIs 13, 14, 11, 10 =
-// INTIDs 29, 30, 27, 26, while Mi Pad 4's own node (Resources/DTBs/clover.dts:2233) is
-//   compatible = "arm,armv8-timer"; interrupts = <0x01 0x01 0xf08  0x01 0x02 0xf08  0x01 0x03 0xf08  0x01 0x00 0xf08>
-// four PPIs (type 0x01) numbered 1, 2, 3, 0, and a device-tree PPI number becomes INTID 16 + number: 17 secure EL1 physical, 18 non-secure EL1
-// physical, 19 EL1 virtual, 16 EL2 physical. 27 is none of them, yet enableCPUTimeBase arms CNTV_CTL_EL0, whose line here is 19, so the base driver
-// started the counter but armed a line that never fires: nothing on this board has ever taken a tick (round77: no timed wait ever returns).
+// Redistributor ISENABLER0: SGIs 0..15 (only SGI 0 is used by the kernel; the others let the self-SGI probe tell which INTIDs the GIC accepts) and PPI 27.
+// SDM660: this SoC's device tree numbers the arch timer PPI 19 (16 + 3), and
+// enableCPUTimeBase arms CNTV_CTL_EL0, whose line is 19. The base driver arms
+// PPI 27, a line nothing raises, so no tick is ever taken. The boot argument
+// armcpu-timer-intid selects the line; the default keeps the base behaviour.
 extern "C" volatile uint32_t armcpu_timer_intid = 27;
 static uint32_t sgiPpiEnable (void) { return 0xffffU | (1U << armcpu_timer_intid); }
-
-// clover change (boot-arg armcpu-clock-panic=N, 0 = never): panic once N timer interrupts have been taken. A hang whose cause is not the clock
-// would otherwise leave the panel silent forever; this makes the clock itself the thing that speaks, from EL1, without any process cooperating.
-// Round 86 adds what it says. Every other report this board has is drawn by the code under examination -- the tty for a process, the parent's
-// wait4 for a child -- so a hang inside the console write path cannot be told apart from a hang after it. The timer interrupt can: it is taken
-// *while* the hung context is the one on the core, and ELR_EL1 then holds that context's return address, which is the address of the instruction
-// it is hung on. SPSR_EL1.M[3:0] says where it was hung (5 = EL1h, kernel mode on SP_EL1; 0 = EL0t, user mode; 4 = EL1 using SP_EL0). The pair
-// turns "nothing more appears on the panel" into a name, decoded offline against the in-volume kernel's symbol table.
-//   elr inside tty/console text   it is spinning there, and the function is settled in one photograph;
-//   elr in idle or WFI            the hung thread is asleep somewhere else, and the core is free;
-//   no panic at all               the hung context has IRQs masked, so no tick is taken either -- which is itself a shape, and rules out ttysleep.
-// CNTVCT at the first tick and at the last, with CNTFRQ, is the same round's second gift: it is the first measurement of how long a tick is on
-// this board, so the tick count becomes wall-clock time and every future deadline can be budgeted instead of guessed.
-static uint64_t gClockPanic = 0;
-static uint64_t gTick0Counter = 0;
-static uint64_t gTickCounterFrequency = 0;
-
-// Round147 (boot-arg clover-unattended=<seconds>, 0 = never): a wall-clock deadline, not a tick
-// count. gClockPanic counts interrupts, which is the same thing only while the clock is the one
-// this board expects; the unattended contract promises "no progress for N seconds -> fastboot", so
-// it measures CNTVCT against CNTFRQ from the first tick. CloverSdhci marks the restart reason at
-// the same argument, so the panic this raises resets into fastboot instead of sitting on a screen.
-// A context that masks IRQs still escapes both: no tick, no deadline. That is why the panic screen
-// and not this timer is the primary path, and why the host also watches for fastboot.
-static uint64_t gUnattendedSeconds = 0;
 
 static const uint32_t kIpiSpiBase = 1008;   // INTIDs 1008..1015 stand for 'IPI to logical core 0..7'
 
@@ -167,7 +130,7 @@ static void spiIpiSend (uintptr_t dist, uint32_t core)
 static uint64_t counter (void)
 {
   uint64_t value;
-  __asm__ volatile ("isb\n\tmrs %0, cntvct_el0" : "=r" (value));
+  __asm__ volatile ("isb; mrs %0, cntvct_el0" : "=r" (value));
   return value;
 }
 
@@ -363,7 +326,7 @@ void ArmCpu::enableGic (void)
   uint64_t value;
   __asm__ volatile ("mrs %0, icc_sre_el1" : "=r" (value));
   value |= 1;
-  __asm__ volatile ("msr icc_sre_el1, %0\n\tisb" :: "r" (value) : "memory");
+  __asm__ volatile ("msr icc_sre_el1, %0; isb" :: "r" (value) : "memory");
   __asm__ volatile ("mrs %0, icc_sre_el1" : "=r" (value));
   if ((value & 1) == 0) { panic ("ArmCpu: GICv3 system register interface unavailable"); }
   __asm__ volatile ("mrs %0, icc_ctlr_el1" : "=r" (value));
@@ -379,7 +342,7 @@ void ArmCpu::enableGic (void)
     write32 (dist, 0, read32 (dist, 0) | 0x12U);
   }
   value = 1;
-  __asm__ volatile ("msr icc_igrpen1_el1, %0\n\tdsb sy\n\tisb" :: "r" (value) : "memory");
+  __asm__ volatile ("msr icc_igrpen1_el1, %0; dsb sy; isb" :: "r" (value) : "memory");
   if (!secondary) {
     uint64_t pmr, ig, sre;
     __asm__ volatile ("mrs %0, icc_pmr_el1" : "=r" (pmr));
@@ -400,6 +363,11 @@ void ArmCpu::enableGic (void)
 
 bool ArmCpu::start (IOService *provider)
 {
+  {
+    unsigned timerIntid = armcpu_timer_intid;
+    PE_parse_boot_argn ("armcpu-timer-intid", &timerIntid, sizeof (timerIntid));
+    if (timerIntid >= 16 && timerIntid <= 31) { armcpu_timer_intid = timerIntid; }
+  }
   unsigned skip = 0;
   PE_parse_boot_argn ("armcpu-skip-gic", &skip, sizeof (skip));
   skipGic = skip != 0;
@@ -409,15 +377,6 @@ bool ArmCpu::start (IOService *provider)
   unsigned spiIpi = 0;
   PE_parse_boot_argn ("armcpu-spi-ipi", &spiIpi, sizeof (spiIpi));
   gSpiIpi = spiIpi == 1;
-  unsigned timerIntid = armcpu_timer_intid;
-  PE_parse_boot_argn ("armcpu-timer-intid", &timerIntid, sizeof (timerIntid));
-  if (timerIntid >= 16 && timerIntid <= 31) { armcpu_timer_intid = timerIntid; }
-  unsigned clockPanic = 0;
-  PE_parse_boot_argn ("armcpu-clock-panic", &clockPanic, sizeof (clockPanic));
-  gClockPanic = clockPanic;
-  unsigned unattended = 0;
-  PE_parse_boot_argn ("clover-unattended", &unattended, sizeof (unattended));
-  gUnattendedSeconds = unattended;
   unsigned diagnostic = 0;
   PE_parse_boot_argn("armcpu-diagnostics", &diagnostic, sizeof(diagnostic));
   diagnosePower=diagnostic==1;
@@ -608,10 +567,6 @@ void ArmCpu::dispatch (void *target, void *, void *, int)
 
 void ArmCpu::interrupt (void)
 {
-  // Taken at entry, before anything here can nest another exception: at this point ELR_EL1 is still
-  // the address the IRQ took us away from, and SPSR_EL1 the mode it was taken away in.
-  uint64_t entryElr = 0, entrySpsr = 0;
-  __asm__ volatile ("mrs %0, elr_el1\n\tmrs %1, spsr_el1" : "=r" (entryElr), "=r" (entrySpsr));
   unsigned drained=0;
   for (;;) {
     armcpu_irq_phase=1;
@@ -621,51 +576,11 @@ void ArmCpu::interrupt (void)
     if ((id & 0xffffff) >= 1020) { armcpu_irq_phase=0;break; }
     if(diagnosePower && ++drained>128)panic("ArmCpu: IRQ drain exceeds 128 id=%llx timer=%llu IPI=%llu",id,armcpu_timer_interrupts,armcpu_ipi_interrupts);
     if ((id & 0xffffff) == armcpu_timer_intid) {
-      if ((gClockPanic != 0 || gUnattendedSeconds != 0) && armcpu_timer_interrupts == 0) {
-        // The first tick is the start of the ruler: everything between this counter value and the
-        // watchdog's, divided by the ticks in between, is the timer period in counter units, and
-        // CNTFRQ turns that into seconds. Read once, here, so a trapped CNTFRQ could not disturb a
-        // later panic -- and waitClear (above) already reads the same register on this board.
-        __asm__ volatile ("mrs %0, cntfrq_el0" : "=r" (gTickCounterFrequency));
-        gTick0Counter = counter ();
-      }
       armcpu_timer_interrupts = armcpu_timer_interrupts + 1;
       armcpu_core_timer[logicalId & 7] = armcpu_core_timer[logicalId & 7] + 1;
       armcpu_irq_phase=2;
       rtclock_intr (0);
       armcpu_irq_phase=3;
-      // Round147 comes first: it is a wall-clock promise, and its message names the contract rather
-      // than a tick count. The deadline is measured from the first tick, so it describes silence
-      // after the clock started, not time spent in arm_init before that.
-      if (gUnattendedSeconds != 0 && gTickCounterFrequency != 0) {
-        const uint64_t now = counter ();
-        if (now - gTick0Counter >= gUnattendedSeconds * gTickCounterFrequency) {
-          uint64_t elr = 0, spsr = 0;
-          __asm__ volatile ("mrs %0, elr_el1\n\tmrs %1, spsr_el1" : "=r" (elr), "=r" (spsr));
-          panic ("clover r148: unattended deadline %llu s (elr=%llx spsr=%llx ticks=%llu cnt0=%llx cnt1=%llx freq=%llx)",
-                 gUnattendedSeconds, entryElr, entrySpsr, armcpu_timer_interrupts, gTick0Counter, now,
-                 gTickCounterFrequency);
-        }
-      }
-      // Round210: one CPU writes the beat, and only on a boot that asked for the deadline. The
-      // driver throttles it to one record per four seconds and skips it whenever the block guard is
-      // held, so a healthy boot pays a block write every four seconds and a stalled one pays a
-      // failed TryLock.
-      if ((logicalId & 7) == 0 && gUnattendedSeconds != 0) {
-        clover_emmc_flight_beat ();
-      }
-      // Closer the clock can be observed without any process cooperating: reaching the count is itself the reading, and the panic screen
-      // keeps the first panic, so a probe that finished earlier is not overwritten by this one.
-      if (gClockPanic != 0 && armcpu_timer_interrupts >= gClockPanic) {
-        // elr= is the entry sample, which is the one that describes the hung context; elr2= is read
-        // at the panic itself, and if rtclock_intr nested an exception of its own the two differ --
-        // a difference that names the fault instead of the hang.
-        uint64_t elr = 0, spsr = 0;
-        __asm__ volatile ("mrs %0, elr_el1\n\tmrs %1, spsr_el1" : "=r" (elr), "=r" (spsr));
-        panic ("ArmCpu: clock watchdog at %llu ticks (elr=%llx spsr=%llx elr2=%llx cnt0=%llx cnt1=%llx freq=%llx)",
-               armcpu_timer_interrupts, entryElr, entrySpsr, elr, gTick0Counter, counter (),
-               gTickCounterFrequency);
-      }
     } else if ((id & 0xffffff) == 0) {
       armcpu_ipi_interrupts = armcpu_ipi_interrupts + 1;
       armcpu_core_sgi[logicalId & 7] = armcpu_core_sgi[logicalId & 7] + 1;
@@ -698,7 +613,7 @@ void ArmCpu::interrupt (void)
       }
     }
     armcpu_irq_phase=6;
-    __asm__ volatile ("msr icc_eoir1_el1, %0\n\tisb" :: "r" (id) : "memory");
+    __asm__ volatile ("msr icc_eoir1_el1, %0; isb" :: "r" (id) : "memory");
   }
 }
 
@@ -713,7 +628,7 @@ void ArmCpu::signalCPU (IOCPU *target)
                  ((aff & 0xff00) << 8) | (1ULL << (aff & 0xff));
   armcpu_ipi_sent = armcpu_ipi_sent + 1;
   if (gSpiIpi) { spiIpiSend (gDist, peer->logicalId & 7); return; }
-  __asm__ volatile ("dsb ishst\n\tmsr icc_sgi1r_el1, %0\n\tisb" :: "r" (sgi) : "memory");
+  __asm__ volatile ("dsb ishst; msr icc_sgi1r_el1, %0; isb" :: "r" (sgi) : "memory");
 }
 
 // Diagnostic: sends SGI 0 to the core whose MPIDR affinity is aff (the DT "reg" value, e.g. 0x100 for core 1) exactly as signalCPU
@@ -759,7 +674,7 @@ extern "C" void armcpu_sgi_selfprobe (uint64_t *out)
 {
   uint64_t mpidr, daif, v;
   __asm__ volatile ("mrs %0, mpidr_el1" : "=r" (mpidr));
-  __asm__ volatile ("mrs %0, daif\n\tmsr daifset, #2\n\tisb" : "=r" (daif) :: "memory");
+  __asm__ volatile ("mrs %0, daif; msr daifset, #2; isb" : "=r" (daif) :: "memory");
   for (unsigned i = 0; i < 10; i++) { out[i] = 0; }
   out[0] = mpidr;
   __asm__ volatile ("mrs %0, icc_pmr_el1" : "=r" (v)); out[3] = v;
@@ -772,8 +687,8 @@ extern "C" void armcpu_sgi_selfprobe (uint64_t *out)
     for (uint64_t intid = 0; intid < 16; intid++) {
       const uint64_t sgi = base | (intid << 24);
       uint64_t h = 1023, ta, tb;
-      __asm__ volatile ("dsb ishst\n\tisb\n\tmrs %0, cntvct_el0\n\tisb" : "=r" (ta) :: "memory");
-      __asm__ volatile ("msr icc_sgi1r_el1, %0\n\tisb\n\tmrs %1, cntvct_el0" : "=r" (tb) : "r" (sgi) : "memory");
+      __asm__ volatile ("dsb ishst; isb; mrs %0, cntvct_el0; isb" : "=r" (ta) :: "memory");
+      __asm__ volatile ("msr icc_sgi1r_el1, %0; isb; mrs %1, cntvct_el0" : "=r" (tb) : "r" (sgi) : "memory");
       if (intid == 0) { out[8] = tb - ta; }
       for (unsigned polls = 0; polls < 400; polls++) {
         __asm__ volatile ("mrs %0, icc_hppir1_el1" : "=r" (h));
@@ -783,10 +698,10 @@ extern "C" void armcpu_sgi_selfprobe (uint64_t *out)
       if ((h & 0xffffff) == intid) {
         out[1] |= 1ULL << intid;
         __asm__ volatile ("mrs %0, icc_iar1_el1" : "=r" (v));
-        __asm__ volatile ("msr icc_eoir1_el1, %0\n\tisb" :: "r" (v) : "memory");
+        __asm__ volatile ("msr icc_eoir1_el1, %0; isb" :: "r" (v) : "memory");
         continue;
       }
-      __asm__ volatile ("dsb ishst\n\tmsr icc_sgi0r_el1, %0\n\tisb" :: "r" (sgi) : "memory");
+      __asm__ volatile ("dsb ishst; msr icc_sgi0r_el1, %0; isb" :: "r" (sgi) : "memory");
       for (unsigned polls = 0; polls < 400; polls++) {
         __asm__ volatile ("mrs %0, icc_hppir0_el1" : "=r" (h));
         if ((h & 0xffffff) == intid) { break; }
@@ -795,16 +710,16 @@ extern "C" void armcpu_sgi_selfprobe (uint64_t *out)
       if ((h & 0xffffff) == intid) {
         out[2] |= 1ULL << intid;
         __asm__ volatile ("mrs %0, icc_iar0_el1" : "=r" (v));
-        __asm__ volatile ("msr icc_eoir0_el1, %0\n\tisb" :: "r" (v) : "memory");
+        __asm__ volatile ("msr icc_eoir0_el1, %0; isb" :: "r" (v) : "memory");
       }
     }
   }
   {
     uint64_t ta, tb;
-    __asm__ volatile ("isb\n\tmrs %0, cntvct_el0\n\tisb\n\tmrs %2, icc_pmr_el1\n\tisb\n\tmrs %1, cntvct_el0" : "=r" (ta), "=r" (tb), "=r" (v) :: "memory");
+    __asm__ volatile ("isb; mrs %0, cntvct_el0; isb; mrs %2, icc_pmr_el1; isb; mrs %1, cntvct_el0" : "=r" (ta), "=r" (tb), "=r" (v) :: "memory");
     out[9] = tb - ta;
   }
-  __asm__ volatile ("msr daif, %0\n\tisb" :: "r" (daif) : "memory");
+  __asm__ volatile ("msr daif, %0; isb" :: "r" (daif) : "memory");
 }
 
 extern "C" void armcpu_ipi_selftest (uint64_t aff)
@@ -812,13 +727,13 @@ extern "C" void armcpu_ipi_selftest (uint64_t aff)
   uint64_t sgi = ((aff & 0xff00000000ULL) << 16) | ((aff & 0xff0000) << 16) | ((aff & 0xff00) << 8) | (1ULL << (aff & 0xff));
   armcpu_ipi_selftest_sent = armcpu_ipi_selftest_sent + 1;
   if (gSpiIpi) { spiIpiSend (gDist, static_cast<uint32_t> ((aff >> 8) & 7)); return; }
-  __asm__ volatile ("dsb ishst\n\tmsr icc_sgi1r_el1, %0\n\tisb" :: "r" (sgi) : "memory");
+  __asm__ volatile ("dsb ishst; msr icc_sgi1r_el1, %0; isb" :: "r" (sgi) : "memory");
 }
 
 void ArmCpu::enableCPUTimeBase (bool enabled)
 {
   uint64_t value = enabled ? 1 : 2;
-  __asm__ volatile ("msr cntv_ctl_el0, %0\n\tisb" :: "r" (value) : "memory");
+  __asm__ volatile ("msr cntv_ctl_el0, %0; isb" :: "r" (value) : "memory");
 }
 
 void ArmCpu::quiesceCPU (void)
@@ -827,7 +742,7 @@ void ArmCpu::quiesceCPU (void)
   if(diagnosePower)panic("ArmCpu: unsupported quiesce requested before timer/GIC disable caller=%p halt=%u timer=%llu phase=%u",__builtin_return_address(0),armcpu_halt_calls,armcpu_timer_interrupts,armcpu_irq_phase);
   enableCPUTimeBase (false);
   uint64_t value = 0;
-  __asm__ volatile ("msr icc_igrpen1_el1, %0\n\tdsb sy\n\tisb" :: "r" (value) : "memory");
+  __asm__ volatile ("msr icc_igrpen1_el1, %0; dsb sy; isb" :: "r" (value) : "memory");
 }
 
 void ArmCpu::haltCPU (void)
@@ -849,7 +764,7 @@ static void cleanToMemory (const void *start, size_t length)
   uintptr_t line = static_cast<uintptr_t> (4) << ((ctr >> 16) & 15);
   uintptr_t address = reinterpret_cast<uintptr_t> (start) & ~(line - 1), end = reinterpret_cast<uintptr_t> (start) + length;
   for (; address < end; address += line) { __asm__ volatile ("dc civac, %0" :: "r" (address) : "memory"); }
-  __asm__ volatile ("dsb sy\n\tisb" ::: "memory");
+  __asm__ volatile ("dsb sy; isb" ::: "memory");
 }
 
 kern_return_t ArmCpu::startCPU (vm_offset_t, vm_offset_t)
