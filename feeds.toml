@@ -9,6 +9,9 @@ kind = "soc"
 name = "sdm660"
 git = "https://github.com/gs240333/UniXNU-sdm660-common.git"
 commit = "71766483007f47f584e95c1e867154475753190d"
-# The board ArmCpu is kept under drivers/ArmCpu for the next step, but it is not
-# selected yet: link against the base component while the storage driver that
-# provides its board hooks is still missing.
+# SDM660 ArmCpu: the base driver arms the arch timer with PPI 27, this SoC raises
+# 19. The board copy takes the line from armcpu-timer-intid and changes nothing else.
+[[source]]
+kind = "driver"
+name = "ArmCpu"
+local = "drivers/ArmCpu"
