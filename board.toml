@@ -80,6 +80,12 @@ kernel_args = [
   # read path that mounts the OS volume inside the container.
   "clover-emmc=21",
   "clover-apfs=3",
+  # CloverBlock renames the OS window's whole media to this alias, so the root is
+  # selected by BSD name. /chosen must not carry root-matching: IOFindBSDRoot
+  # deserializes that first and then never looks at rd= (CloverBlock.cpp's
+  # round-119 note). The "md0" prefix also makes bsd_init skip root
+  # authentication, which a foreign APFS volume cannot pass.
+  "rd=md0s1",
   "-no_slto_panic",
   "ml-timeout-lock-panic-scale=40",
   "offline-mobile-graphics-load=1",
@@ -94,7 +100,10 @@ kernel_args = [
 ]
 
 [payload.adt]
-root_match_volume_uuid = "04769D26-2CA0-4825-B443-E2E5F88300F2"
+# No root_match_volume_uuid on purpose: /chosen's root-matching would be taken
+# first by IOFindBSDRoot and then ignore rd=, and no service here carries that
+# UUID in a form IOMedia matching accepts. The root is the rd=md0s1 alias that
+# CloverBlock writes on the OS window's media.
 chip_id = "0x13d"
 owned_memory_size = "0x40000000"
 unique_chip_id = "required"

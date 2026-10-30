@@ -221,6 +221,9 @@ static const char kBSDMinorKey[] = "BSD Minor";
 // the first test and fails the second -- rootauth gets skipped, the root still comes from the BSD-name
 // match, and the trailing s39 keeps naming the same slice the storage family named disk0s39.
 static const char kRootAlias[] = "md0s39";
+// wayne: the OS window's whole media is renamed to this alias before the root
+// search, and the board passes rd=md0s1, so the root is selected by BSD name.
+static const char kOsAlias[] = "md0s1";
 // Round127's geometry, latched from drivers/CloverSdhci's window before the device is published and
 // never touched again: zero sectors means the old whole-card description, nonzero means this device
 // *is* logfs's partition, and every block number the storage stack hands down has the window's
@@ -1940,6 +1943,13 @@ static void prepareApfsBoot(IOMedia *whole)
     uint32_t wholeMinor = 0xffffffff;
     if (volumeBsd(whole, &wholeName, &wholeMajor, &wholeMinor)) {
       gOsWholeDev = volumeDev(wholeMajor, wholeMinor);
+    }
+    // The root is selected by BSD name (rd=md0s1 in the board's arguments): the
+    // media is renamed to that alias before bsd_autoconf's root search, so
+    // IOBSDNameMatching lands on it, and the "md0" prefix makes bsd_init skip
+    // root authentication, which a foreign APFS volume cannot pass.
+    if (!whole->setProperty(kBSDNameKey, kOsAlias)) {
+      fail("osalias", 0);
     }
   }
   IOLog("CloverBlock r145: os vu=%s bsd=%s %u:%u p=%u whole=%u\n", kRootVolumeUuid,
