@@ -54,15 +54,7 @@ jobs:
           echo "device: $DEV"
           RAW=$(printf '%s' "$DEV" | sed 's#/dev/disk#/dev/rdisk#')
           dd if="$RAW" of="$GITHUB_WORKSPACE/data-seed.img" bs=1m count=32
-          UUID=$(python3 - <<'PY'
-          import plistlib
-          data = plistlib.load(open('/tmp/apfs.plist', 'rb'))
-          for container in data.get('Containers', []):
-              for volume in container.get('Volumes', []):
-                  if volume.get('Name') == 'Data':
-                      print((volume.get('APFSVolumeUUID') or volume.get('VolumeUUID') or '').upper())
-          PY
-          )
+          UUID=$(diskutil info -plist /Volumes/Data | python3 -c "import plistlib,sys;d=plistlib.load(sys.stdin.buffer);print((d.get('APFSVolumeUUID') or d.get('VolumeUUID') or '').upper())" | head -1)
           echo "DATA_UUID=$UUID" >> "$GITHUB_ENV"
           ls -l "$GITHUB_WORKSPACE/data-seed.img"
           hdiutil detach "$DEV"
