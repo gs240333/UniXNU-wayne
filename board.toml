@@ -60,8 +60,13 @@ loader = "firmware"
 title = "UniXNU"
 kernel_args = ["-v", "serial=3", "keepsyms=1"]
 panic_screen = false
-# Stage 3 probe: wait this many seconds after the MMU is enabled, then reset.
+# Stage 3/4 probe. With entry_probe_reset_after the reset moves from "right
+# after the MMU is enabled" to after the named call, which is how the boot is
+# bisected: a reboot after the delay answers "did the kernel get past here?".
 entry_probe_reset_delay = 10
+entry_probe_reset_after = "arm_vm_init"
+entry_probe_reset_in = "_arm_init"
+entry_probe_reset_occurrence = 1
 
 [payload.adt]
 chip_id = "8011"
