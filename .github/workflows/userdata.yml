@@ -1,0 +1,93 @@
+name: Build userdata
+
+# The last piece between "the kernel reaches root mount" and "iOS has a root":
+# the userdata image holds the unchanged OS and SystemOS disk images of the
+# target IPSW behind a small manifest.
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Only check sizes and pins'
+        type: boolean
+        default: true
+
+env:
+  HOMEBREW_NO_AUTO_UPDATE: 1
+  HOMEBREW_NO_INSTALL_CLEANUP: 1
+  HOMEBREW_NO_ENV_HINTS: 1
+
+jobs:
+  userdata:
+    runs-on: macos-26
+    timeout-minutes: 240
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+      DEFCONFIG: wayne_defconfig
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: UniXNU/UniXNU
+          path: UniXNU
+          submodules: recursive
+
+      - uses: actions/checkout@v4
+        with:
+          path: device
+
+      - uses: actions/checkout@v4
+        with:
+          repository: gs240333/UniXNU-sdm660-common
+          path: UniXNU-sdm660-common
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install host tools
+        run: |
+          brew install llvm lld mtools dtc unifdef
+          echo "$(brew --prefix llvm)/bin" >> "$GITHUB_PATH"
+
+      - name: Select the device
+        working-directory: UniXNU
+        run: |
+          cat > ../device/local.toml <<'EOF'
+          [[source]]
+          kind = "soc"
+          name = "sdm660"
+          local = "../UniXNU-sdm660-common"
+          EOF
+          chmod +x unixnu
+          ./unixnu defconfig "$DEFCONFIG" -D ../device
+
+      - name: Disk space
+        run: df -h /
+
+      - name: IPSW info
+        working-directory: UniXNU
+        run: ./unixnu ipsw info -D ../device
+
+      - name: Check the userdata image
+        working-directory: UniXNU
+        run: |
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            ./unixnu build userdata -D ../device --dry-run
+          else
+            ./unixnu build userdata -D ../device
+          fi
+
+      - name: Collect outputs
+        if: always()
+        run: |
+          OUT=$(cd UniXNU && ./unixnu status --json -D ../device | python3 -c "import json,sys;print(json.load(sys.stdin)['output'])")
+          mkdir -p artifact
+          cp -rv "$OUT/userdata" artifact/ 2>/dev/null || true
+          cp -rv "$OUT/logs" artifact/logs 2>/dev/null || true
+          ls -la artifact
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: wayne-userdata
+          path: artifact/**
+          if-no-files-found: warn

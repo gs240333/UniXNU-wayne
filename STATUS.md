@@ -239,3 +239,24 @@ clover 的路线：
 3. 打开 `CONFIG_XNU_NATIVE_LEGACY_DISPLAY`（clover round180）才能把 GOP 帧缓冲交给 iOS 显示栈。
 
 素材已下载到 `clover-drivers/`（CloverSdhci.cpp 405KB、CloverBlock.cpp 147KB、各自构建脚本）。
+
+## 存储栈已通（2026-10-30 09:50）
+
+| panic | 含义 | 处理 |
+| --- | --- | --- |
+| `CloverBlock r137: udwindow 0` | `CloverSdhci` 里硬编码的 userdata 窗口与卡上 GPT 不符 | wayne 的 userdata 起始 LBA 是 `0xdc0000`(14417920)，末日 LBA 恰好与 clover 相同(122142686)；已改常量 |
+| `CloverBlock r137: root-magic 2615634631` | 分区读到了，但开头不是 `N4KROOT` 根镜像 | **下一阶段：userdata 镜像**（从 iPadOS IPSW 生成 OS/SystemOS 窗口并刷入） |
+
+这条链路已经证明可用：eMMC PHY/时钟 → PIO 读 → GPT 解析 → 窗口匹配 → IOBlockStorageDevice → kernel 读到扇区。
+
+### 最后一段管道
+
+1. `unixnu build userdata`（macOS runner 上跑）：把 IPSW 里 **未改动的 OS 与 SystemOS 磁盘镜像**
+   写成 userdata 镜像（带 manifest、按 `[ipsw.sha256]` 校验、检查是否放得进分区）。
+   wayne 的 userdata 是 `mmcblk0p64`，51GB，够放 iPadOS 17.7.11。
+2. 刷进 userdata（`fastboot flash userdata`）。
+3. ADT 里加 `root_match_volume_uuid` 指向我们镜像里的 OS 卷；内核就能挂载 APFS root。
+4. 之后 dyld/launchd 起来；要**看到** iOS 界面还需要 `CONFIG_XNU_NATIVE_LEGACY_DISPLAY=y`
+   （clover round180 的做法：原版 IOMobileFramebufferLegacy 直接用 GOP 帧缓冲当扫描输出）。
+
+IPSW 已本地下载完成（`ipad-17.7.11.ipsw`，6.37GB）。
