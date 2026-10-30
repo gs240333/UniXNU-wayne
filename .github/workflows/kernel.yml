@@ -84,9 +84,9 @@ jobs:
         working-directory: UniXNU
         run: ./unixnu tree -D ../device
 
-      # The PMGR archive audits the board's own prelinked kernel, so the first
-      # pass builds one without it and the second pass turns it on. This is the
-      # round 1 / round 2 shape the reference board documents.
+      # The PMGR and storage archives audit the board's own prelinked kernel, so
+      # the first pass builds one without them and the second pass turns them
+      # on. This is the round 1 / round 2 shape the reference board documents.
       - name: Seed the prelink reference
         working-directory: UniXNU
         env:
@@ -95,11 +95,19 @@ jobs:
           cp ../device/board.toml /tmp/board.toml.keep
           cp ../device/configs/wayne_defconfig /tmp/wayne_defconfig.keep
           python3 - <<'PY'
+          import re
           from pathlib import Path
           b = Path('../device/board.toml')
-          b.write_text(b.read_text().replace('  "build-clover-pmgr.py",\n', ''))
+          text = b.read_text()
+          for line in ('  "build-clover-pmgr.py",\n',
+                       '  "build-wayne-driver.py CloverSdhci",\n',
+                       '  "build-clover-block.py",\n'):
+              text = text.replace(line, '')
+          b.write_text(text)
           d = Path('../device/configs/wayne_defconfig')
-          d.write_text(d.read_text().replace('CONFIG_XNU_SHENG_PMGR=y', 'CONFIG_XNU_SHENG_PMGR=n'))
+          t = d.read_text().replace('CONFIG_XNU_SHENG_PMGR=y', 'CONFIG_XNU_SHENG_PMGR=n')
+          t = re.sub(r'^CONFIG_XNU_EXTRA_LD_ARCHIVES=.*$', '', t, flags=re.M)
+          d.write_text(t)
           PY
           ./unixnu defconfig "$DEFCONFIG" -D ../device
           SDKROOT="$(xcrun --sdk iphoneos --show-sdk-path)" ./unixnu build kernel -D ../device
