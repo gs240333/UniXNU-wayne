@@ -8,7 +8,7 @@
  * clover_emmc_run and clover_unattended_begin), so only input, power and the
  * DSP remain empty. A missing symbol fails the kernel link.
  *
- * The native_verified_block_*/native_ram_block_* entries below are weak: the
+ * The block-stack contract entries below are weak: the
  * first pass of the kernel build links without any archive, and kern_exec.c and
  * IOKitBSDInit.cpp reference them once the owner mount is switched on. The real
  * definitions live in drivers/CloverBlock and win at the final link. Do not add
