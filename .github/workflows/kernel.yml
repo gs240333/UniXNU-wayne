@@ -100,7 +100,7 @@ jobs:
           b = Path('../device/board.toml')
           text = b.read_text()
           for line in ('  "build-clover-pmgr.py",\n',
-                       '  "build-wayne-driver.py CloverSdhci",\n',
+                       '  "build-wayne-driver.py CloverSdhci --out clover-sdhci",\n',
                        '  "build-clover-block.py",\n'):
               text = text.replace(line, '')
           b.write_text(text)
