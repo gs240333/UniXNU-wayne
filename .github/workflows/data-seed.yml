@@ -26,14 +26,19 @@ jobs:
           DEV=$(python3 -c "import plistlib;d=plistlib.load(open('/tmp/attach.plist','rb'));print([e['dev-entry'] for e in d['system-entities'] if e.get('content-hint')=='Apple_APFS'][0])")
           DISK=$(python3 -c "import plistlib;d=plistlib.load(open('/tmp/attach.plist','rb'));print([e['dev-entry'] for e in d['system-entities'] if 'dev-entry' in e][0])")
           echo "container: $DEV disk: $DISK"
-          diskutil apfs list "$DEV"
-          UUID=$(diskutil apfs list -plist "$DEV" | python3 -c "
+          # The volume lives in a synthesized container; ours is the only one
+          # whose capacity is the 32 MiB this step just asked for.
+          UUID=$(diskutil apfs list -plist | python3 -c "
           import plistlib, sys
           data = plistlib.load(sys.stdin.buffer)
+          best = None
           for container in data.get('Containers', []):
+              capacity = container.get('CapacityCeiling') or 0
               for volume in container.get('Volumes', []):
                   if volume.get('Name') == 'Data':
-                      print((volume.get('APFSVolumeUUID') or volume.get('VolumeUUID') or '').upper())
+                      if best is None or capacity < best[0]:
+                          best = (capacity, (volume.get('APFSVolumeUUID') or volume.get('VolumeUUID') or '').upper())
+          print(best[1] if best else '')
           " | head -1)
           echo "DATA_UUID=$UUID"
           # The window must start with the APFS container superblock, so the seed
