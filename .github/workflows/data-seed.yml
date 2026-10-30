@@ -20,45 +20,52 @@ jobs:
       - name: Build the APFS Data volume
         run: |
           set -eux
-          # 32 MiB matches the reference window size.
           hdiutil create -size 32m -fs APFS -volname Data -type UDIF -ov /tmp/data.dmg
-          hdiutil attach -readwrite -nobrowse -noautoopen /tmp/data.dmg
+          hdiutil attach -readwrite -nobrowse -noautoopen -plist /tmp/data.dmg > /tmp/attach.plist
+          python3 - <<'PY'
+          import plistlib
+          data = plistlib.load(open('/tmp/attach.plist', 'rb'))
+          for entity in data.get('system-entities', []):
+              if 'dev-entry' in entity:
+                  print('dev:', entity['dev-entry'], 'mount:', entity.get('mount-point', ''))
+          PY
           diskutil apfs list -plist > /tmp/apfs.plist
           python3 - <<'PY'
           import plistlib
           data = plistlib.load(open('/tmp/apfs.plist', 'rb'))
           for container in data.get('Containers', []):
               for volume in container.get('Volumes', []):
-                  name = volume.get('Name', '?')
-                  uuid = volume.get('APFSVolumeUUID') or volume.get('VolumeUUID')
-                  capacity = volume.get('CapacityCeiling')
-                  print(f'volume {name} uuid={uuid} capacity={capacity}')
+                  print('volume', volume.get('Name'), 'uuid',
+                        volume.get('APFSVolumeUUID') or volume.get('VolumeUUID'))
           PY
-          diskutil info -plist /Volumes/Data > /tmp/info.plist || true
-          DEV=$(hdiutil info | awk '/\/tmp\/data.dmg/ {print $1}' | head -1)
-          echo "device: $DEV"
-          hdiutil detach "$DEV"
 
-      - name: Read the volume UUID
+      - name: Read the seed out of the attached device
         run: |
           set -eux
-          hdiutil attach -nomount /tmp/data.dmg
-          diskutil apfs list -plist > /tmp/apfs2.plist
-          python3 - <<'PY' > /tmp/uuid.txt
+          DEV=$(python3 - <<'PY'
           import plistlib
-          data = plistlib.load(open('/tmp/apfs2.plist', 'rb'))
+          data = plistlib.load(open('/tmp/attach.plist', 'rb'))
+          for entity in data.get('system-entities', []):
+              if 'dev-entry' in entity:
+                  print(entity['dev-entry'])
+                  break
+          PY
+          )
+          echo "device: $DEV"
+          RAW=$(printf '%s' "$DEV" | sed 's#/dev/disk#/dev/rdisk#')
+          dd if="$RAW" of="$GITHUB_WORKSPACE/data-seed.img" bs=1m count=32
+          UUID=$(python3 - <<'PY'
+          import plistlib
+          data = plistlib.load(open('/tmp/apfs.plist', 'rb'))
           for container in data.get('Containers', []):
               for volume in container.get('Volumes', []):
                   if volume.get('Name') == 'Data':
                       print((volume.get('APFSVolumeUUID') or volume.get('VolumeUUID') or '').upper())
           PY
-          cat /tmp/uuid.txt
-          DEV=$(hdiutil info | awk '/\/tmp\/data.dmg/ {print $1}' | head -1)
-          RAW=$(echo "$DEV" | sed 's#/dev/disk#/dev/rdisk#')
-          dd if="$RAW" of="$GITHUB_WORKSPACE/data-seed.img" bs=1m count=32
-          hdiutil detach "$DEV"
+          )
+          echo "DATA_UUID=$UUID" >> "$GITHUB_ENV"
           ls -l "$GITHUB_WORKSPACE/data-seed.img"
-          echo "DATA_UUID=$(cat /tmp/uuid.txt)" >> "$GITHUB_ENV"
+          hdiutil detach "$DEV"
 
       - name: Summary
         if: always()
