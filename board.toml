@@ -67,7 +67,7 @@ entry_probe_reset_after = "_machine_startup"
 entry_probe_reset_before = true
 entry_probe_reset_in = "_arm_init"
 entry_probe_reset_occurrence = 1
-panic_screen = true
+panic_screen = false
 kernel_args = [
   "-v",
   "serial=3",
