@@ -214,3 +214,28 @@ DARWINBOOT: inputs validated; exiting boot services
 3. 存储：clover 的 `CloverSdhci.cpp`(397KB) / `CloverBlock.cpp`(145KB) 是重度设备定制，
    且 `CloverBlock` 硬编码了自己的 userdata 窗口常量（wayne 的分区号与之不同），
    要移植必须按 wayne 的 `mmcblk0p64` 改常量，不能直接照抄。
+
+## 内核已跑到 root 挂载（2026-10-30 08:40）
+
+真机 panic 屏依次被逐个击破，每一行都是一次已验证的进展：
+
+| panic / 现象 | 根因 | 修复 |
+| --- | --- | --- |
+| 停在色条，无输出 | `check_for_panic_log()` 映射并读 `PLATFORM_PANIC_LOG_PADDR`（0x3c0f0000），SDM660 上是空 MMIO | `CONFIG_XNU_DT_PANIC_REGION=y`（sheng 也开着） |
+| `can't has cs_enforcement_disable` @AppleMobileFileIntegrity.cpp:5261 | AMFI 不接受该启动参数（clover 靠自己的 AMFI 补丁） | 去掉 `cs_enforcement_disable=1` |
+| `AMFI: No PMGR?` @ConfigurationSettings.cpp:235 | 没有 `ApplePMGRNub` 服务 | `CONFIG_XNU_SHENG_PMGR=y` + `scripts/build-clover-pmgr.py`（两遍构建：先出 kernel.macho 供审计）+ 把 `clover_emmc_run` 等板级钩子做成空桩 |
+| 同上，nub 仍未发布 | `sheng_pmgr_run()` 在 `clover-pmgr != 2` 时直接 return | 加 `clover-pmgr=2` |
+| **`Failed to mount root device` @IOKitBSDInit.cpp:984** | 没有任何块设备/根文件系统 | **下一步：eMMC 驱动**（CloverSdhci + CloverBlock，按 wayne 的 GPT） |
+
+顺带确认：内核 console 已经能在 wayne 的 nt36672 面板上画字（panic 屏就是它画的），
+所以之后所有故障都能直接看屏幕。
+
+### 下一堵墙：root 设备
+
+clover 的路线：
+1. `drivers/CloverSdhci`（PIO eMMC 读）→ 提供 `clover_emmc_run`、`clover_emmc_block_*`、`clover_unattended_begin`；
+2. `drivers/CloverBlock` → 把 eMMC 发布成 `IOBlockStorageDevice`（`clover_block_run`）；
+3. ADT 里给 `root-match`：APFS 容器里 OS 卷的 UUID；或先用 mockfs + RAM disk 起 launchd。
+3. 打开 `CONFIG_XNU_NATIVE_LEGACY_DISPLAY`（clover round180）才能把 GOP 帧缓冲交给 iOS 显示栈。
+
+素材已下载到 `clover-drivers/`（CloverSdhci.cpp 405KB、CloverBlock.cpp 147KB、各自构建脚本）。
