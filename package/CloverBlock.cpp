@@ -2568,6 +2568,12 @@ extern "C" int native_verified_block_root_authorized(dev_t device)
   }
   // Data is deliberately absent: it is mounted read-write at /private/var and is never a root,
   // never a shared-cache cache, and never the SystemOS volume the owner mount unions onto "/".
+  // wayne probe: the owner mount asks about a device this file may never have named, so say which
+  // device it asked about and which ones were named, on the screen.
+  if (device != gOsVolumeDev && device != gSystemVolumeDev) {
+    panic("CB root: dev=%u os=%u sys=%u sysvol=%d", (unsigned)device, (unsigned)gOsVolumeDev,
+          (unsigned)gSystemVolumeDev, gSystemVolumeMedia ? 1 : 0);
+  }
   return device == gOsVolumeDev || device == gSystemVolumeDev;
 }
 
