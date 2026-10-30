@@ -1,0 +1,110 @@
+name: Root volume UUID
+
+# The kernel mounts the root by UUID (see docs/guide/userdata.md): attach the
+# OS image of the target IPSW, read the APFS volumes, and write the root volume
+# UUID into [payload.adt] root_match_volume_uuid.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  HOMEBREW_NO_AUTO_UPDATE: 1
+  HOMEBREW_NO_INSTALL_CLEANUP: 1
+  HOMEBREW_NO_ENV_HINTS: 1
+
+jobs:
+  uuid:
+    runs-on: macos-26
+    timeout-minutes: 60
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+      DEFCONFIG: wayne_defconfig
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: UniXNU/UniXNU
+          path: UniXNU
+          submodules: false
+
+      - uses: actions/checkout@v4
+        with:
+          path: device
+
+      - uses: actions/checkout@v4
+        with:
+          repository: gs240333/UniXNU-sdm660-common
+          path: UniXNU-sdm660-common
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install host tools
+        run: |
+          brew install llvm lld mtools dtc unifdef
+          echo "$(brew --prefix llvm)/bin" >> "$GITHUB_PATH"
+
+      - name: Select the device
+        working-directory: UniXNU
+        run: |
+          cat > ../device/local.toml <<'EOF'
+          [[source]]
+          kind = "soc"
+          name = "sdm660"
+          local = "../UniXNU-sdm660-common"
+          EOF
+          chmod +x unixnu
+          ./unixnu defconfig "$DEFCONFIG" -D ../device
+
+      - name: Extract the OS image
+        working-directory: UniXNU
+        run: ./unixnu ipsw fetch OS -D ../device
+
+      - name: Read the APFS volumes
+        working-directory: UniXNU
+        run: |
+          OUT=$(./unixnu status --json -D ../device | python3 -c "import json,sys;print(json.load(sys.stdin)['output'])")
+          DMG=$(find "$(dirname "$OUT")" -path '*ipsw*' -name '044-76040-038.dmg' | head -1)
+          echo "dmg: $DMG"
+          hdiutil attach -readonly -nobrowse -noautoopen "$DMG" >/dev/null
+          diskutil apfs list -plist > /tmp/apfs.plist
+          python3 - <<'PY' > /tmp/uuid.txt
+          import plistlib
+          data = plistlib.load(open('/tmp/apfs.plist', 'rb'))
+          for container in data.get('Containers', []):
+              for volume in container.get('Volumes', []):
+                  name = volume.get('Name', '?')
+                  uuid = volume.get('APFSVolumeUUID') or volume.get('VolumeUUID')
+                  roles = ','.join(volume.get('Roles', []))
+                  print(f'volume {name} role={roles} uuid={uuid}')
+          PY
+          cat /tmp/uuid.txt
+          ROOT=$(python3 - <<'PY'
+          import re
+          for line in open('/tmp/uuid.txt'):
+              if 'role=' in line and ('System' in line or 'name=OS' in line.replace(' ', '')):
+                  match = re.search(r'uuid=([0-9A-Fa-f-]{36})', line)
+                  if match:
+                      print(match.group(1)); break
+          PY
+          )
+          echo "root uuid: $ROOT"
+          if [ -n "$ROOT" ]; then
+            python3 - "$ROOT" <<'PY'
+          import re, sys
+          from pathlib import Path
+          uuid = sys.argv[1].upper()
+          path = Path('../device/board.toml')
+          text = path.read_text()
+          if re.search(r'^root_match_volume_uuid\s*=.*$', text, re.M):
+              text = re.sub(r'^root_match_volume_uuid\s*=.*$', f'root_match_volume_uuid = "{uuid}"', text, flags=re.M)
+          else:
+              text = text.replace('[payload.adt]\n', f'[payload.adt]\nroot_match_volume_uuid = "{uuid}"\n', 1)
+          path.write_text(text)
+          print('board.toml updated:', uuid)
+          PY
+            cd ../device && git -c user.name=gs240333 -c user.email=gs240333@users.noreply.github.com commit -am "board: the OS volume UUID of the target IPSW" && git push
+          fi
+          hdiutil detach "$(hdiutil info | awk '/044-76040-038/ {print $1}' | head -1)" 2>/dev/null || true
