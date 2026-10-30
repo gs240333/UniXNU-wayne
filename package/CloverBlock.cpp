@@ -1,4 +1,4 @@
-﻿// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: MIT
 // clover (Mi Pad 4, SDM660): publish the eMMC as an IOBlockStorageDevice so XNU's own storage
 // stack, not this port's private PIO report, is what reads the card.
 //
@@ -280,7 +280,9 @@ static volatile uint32_t gSystemWindowSectors = 0;
 // kernel patch's native_ram_block_volume_seed() contract is answered here by a window provider
 // instead of a memory disk, so kern_exec.c itself is not touched.
 static const char kDataWindowName[] = "Data";
-static const char kDataVolumeUuid[] = "FC1A580E-2D67-48FC-B8CF-87422A319340";
+// wayne: the 32 MiB APFS Data seed built by the board workflow; its volume UUID
+// is random per build, so it is recorded here after the seed is generated.
+static const char kDataVolumeUuid[] = "2CB9B2EA-29B1-4DE8-BD49-FCBC6CACF929";
 static volatile uint32_t gDataWindowFirst = 0;
 static volatile uint32_t gDataWindowSectors = 0;
 // Each entry's own identity, kept so native_verified_block_manifest_sha384() can name the exact
