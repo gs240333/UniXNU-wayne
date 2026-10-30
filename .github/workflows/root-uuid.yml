@@ -83,7 +83,7 @@ jobs:
           ROOT=$(python3 - <<'PY'
           import re
           for line in open('/tmp/uuid.txt'):
-              if 'role=' in line and ('System' in line or 'name=OS' in line.replace(' ', '')):
+              if ' role=System' in line:
                   match = re.search(r'uuid=([0-9A-Fa-f-]{36})', line)
                   if match:
                       print(match.group(1)); break
