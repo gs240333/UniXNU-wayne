@@ -71,7 +71,6 @@ kernel_args = [
   "armcpu-timer-intid=19",
   "-no_slto_panic",
   "ml-timeout-lock-panic-scale=40",
-  "cs_enforcement_disable=1",
   "offline-mobile-graphics-load=1",
   "offline-legacy-register=1",
   "offline-legacy-phase=4",
