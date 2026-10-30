@@ -260,3 +260,35 @@ clover 的路线：
    （clover round180 的做法：原版 IOMobileFramebufferLegacy 直接用 GOP 帧缓冲当扫描输出）。
 
 IPSW 已本地下载完成（`ipad-17.7.11.ipsw`，6.37GB）。
+
+## iOS 镜像已进机（2026-10-30 12:40）
+
+userdata 里现在是真正的 iPadOS 17.7.11 OS 与 SystemOS 镜像，内核在真机上逐级读通了：
+
+| 阶段 | 真机 panic | 说明 |
+| --- | --- | --- |
+| 清单 | `root-magic 2615634631` → 消失 | `SHNGROOT` 清单被接受 |
+| OS 窗口 | `systemwin 1` → 消失 | OS 窗口的 APFS 容器被识别 |
+| SystemOS 窗口 | `datawin 2` | OS/SystemOS 都在，缺可写的 Data 窗口 |
+
+刷写方式（关键经验）：
+- `fastboot` 会把整个镜像读进内存，8.74GiB 在 12GB 机器上直接 `std::bad_alloc`；
+  **platform-tools 34.0.5** 的 sparse 分块路径可用（37.0.1 不行）。
+- 先用 `make-sparse.py` 把 raw 镜像转 Android sparse；再用 `--skip` 把已写入的窗口
+  标记为 DONT_CARE，只传输新增窗口（SystemOS 只传了 2.91GB）。
+
+### 剩下的最后一块：Data 窗口
+
+`clover-apfs=3`（真正的启动模式）要求清单里有三个窗口，第三个是**可写的 Data 卷**
+（clover 用 32MiB APFS 容器，UUID `FC1A580E-2D67-48FC-B8CF-87422A319340`）。
+clover 仓库里 `append-data-window.py` 引用的 `scripts/prepare-owner-data-fixture.py`
+**并未提交**，所以这个 32MiB seed 需要我们自己造：
+
+1. macOS CI：`hdiutil create -size 32m -fs APFS` + `diskutil apfs addVolume` 建 Data 卷，
+   打印它的 UUID（要回填到 `CloverBlock.cpp` 的 `kDataVolumeUuid`）。
+2. 用 `append-data-window.py`（改 wayne 的 MAX_BYTES）把它作为第 3 个窗口附加到镜像。
+3. 本地只刷"清单 + Data 窗口"（约 32MiB，用 `--skip` 跳过 OS/SystemOS）。
+4. 重编 payload（改 UUID 常量）→ 引导 → 内核应能挂上 APFS root。
+
+同时要核对 `kSystemOsVolumeUuid`（clover 写死 `8846FE78-2910-4297-AF97-D59BB6F8FC16`）
+是否等于我们 SystemOS 卷的真实 UUID，不一致要回填。
