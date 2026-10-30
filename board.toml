@@ -31,6 +31,8 @@ archives = [
   "build-libpthread-kernel.py",
   "build-clover-pmgr.py",
   "build-wayne-stubs.py",
+  "build-wayne-driver.py CloverSdhci",
+  "build-clover-block.py",
 ]
 patch_series = ["arch:patches/xnu/series", "soc:patches/xnu/series", "os:patches/xnu/series", "device:patches/xnu/series"]
 
