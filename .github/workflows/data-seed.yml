@@ -23,8 +23,9 @@ jobs:
           set -eux
           hdiutil create -size 32m -fs APFS -volname Data -type UDIF -ov /tmp/data.dmg
           hdiutil attach -readwrite -nobrowse -noautoopen -plist /tmp/data.dmg > /tmp/attach.plist
-          DEV=$(python3 -c "import plistlib;d=plistlib.load(open('/tmp/attach.plist','rb'));print([e['dev-entry'] for e in d['system-entities'] if 'dev-entry' in e][0])")
-          echo "device: $DEV"
+          DEV=$(python3 -c "import plistlib;d=plistlib.load(open('/tmp/attach.plist','rb'));print([e['dev-entry'] for e in d['system-entities'] if e.get('content-hint')=='Apple_APFS'][0])")
+          DISK=$(python3 -c "import plistlib;d=plistlib.load(open('/tmp/attach.plist','rb'));print([e['dev-entry'] for e in d['system-entities'] if 'dev-entry' in e][0])")
+          echo "container: $DEV disk: $DISK"
           diskutil apfs list "$DEV"
           UUID=$(diskutil apfs list -plist "$DEV" | python3 -c "
           import plistlib, sys
@@ -35,9 +36,11 @@ jobs:
                       print((volume.get('APFSVolumeUUID') or volume.get('VolumeUUID') or '').upper())
           " | head -1)
           echo "DATA_UUID=$UUID"
+          # The window must start with the APFS container superblock, so the seed
+          # is the partition, not the disk image with its partition map.
           RAW=$(printf '%s' "$DEV" | sed 's#/dev/disk#/dev/rdisk#')
-          dd if="$RAW" of="$GITHUB_WORKSPACE/data-seed.img" bs=1m count=32
-          hdiutil detach "$DEV"
+          dd if="$RAW" of="$GITHUB_WORKSPACE/data-seed.img" bs=4096
+          hdiutil detach "$DISK"
           ls -l "$GITHUB_WORKSPACE/data-seed.img"
           echo "DATA_UUID=$UUID" >> "$GITHUB_ENV"
 
