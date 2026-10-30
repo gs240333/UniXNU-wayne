@@ -65,7 +65,7 @@ panic_screen = false
 # answers "did the kernel get past this symbol?".
 entry_probe_reset_delay = 10
 entry_probe_reset_after = "_bsd_init"
-entry_probe_reset_in = "_kernel_bootstrap"
+entry_probe_reset_in = "_kernel_bootstrap_thread"
 entry_probe_reset_occurrence = 1
 
 [payload.adt]
