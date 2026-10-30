@@ -8,6 +8,7 @@ on:
       - 'board.toml'
       - 'configs/**'
       - 'feeds.toml'
+      - 'drivers/**'
       - 'dts/**'
       - 'patches/**'
       - 'package/**'
