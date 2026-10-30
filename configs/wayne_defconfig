@@ -21,12 +21,15 @@ CONFIG_XNU_DT_PANIC_REGION=y
 # Kryo 260 is ARMv8.0-A: PSTATE.PAN is not implemented.
 CONFIG_XNU_NATIVE_PAN=n
 
-# Not selected yet: no native storage, GPU, display or platform power driver.
+# Platform power: AMFI waits for an ApplePMGRNub and panics "AMFI: No PMGR?"
+# without one. scripts/build-clover-pmgr.py writes the archive the base build
+# force-loads under that name.
+# Not selected yet: no native storage, GPU or display driver.
 CONFIG_XNU_ARMVIRT_PLATFORM=n
 CONFIG_XNU_BOOT_PROGRESS=n
 CONFIG_XNU_NATIVE_UFS=n
 CONFIG_XNU_NATIVE_ADRENO=n
 CONFIG_XNU_NATIVE_MOBILE_DISPLAY=n
-CONFIG_XNU_SHENG_PMGR=n
+CONFIG_XNU_SHENG_PMGR=y
 
 CONFIG_XNU_EXTRA_CFLAGS="-Wno-reserved-identifier -Wno-pre-c11-compat -Wno-missing-designated-field-initializers -Wno-suggest-override -Wno-suggest-destructor-override -Wno-ms-bitfield-padding"
