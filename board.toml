@@ -58,10 +58,8 @@ volume = "WAYNEESP"
 size_mib = 54
 loader = "firmware"
 title = "UniXNU"
-kernel_args = ["-v", "serial=3", "debug=0x14e", "keepsyms=1"]
+kernel_args = ["-v", "serial=3", "keepsyms=1"]
 panic_screen = true
-# Stage 3 probe: wait this many seconds after the MMU is enabled, then reset.
-entry_probe_reset_delay = 10
 
 [payload.adt]
 chip_id = "8011"
