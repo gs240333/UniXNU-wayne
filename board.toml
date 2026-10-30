@@ -76,6 +76,10 @@ kernel_args = [
   # The PMGR nub returns without touching anything unless this argument is 2,
   # and AMFI waits for the ApplePMGRNub it publishes.
   "clover-pmgr=2",
+  # 21 publishes the boot block device through CloverBlock; 3 keeps the APFS
+  # read path that mounts the OS volume inside the container.
+  "clover-emmc=21",
+  "clover-apfs=3",
   "-no_slto_panic",
   "ml-timeout-lock-panic-scale=40",
   "offline-mobile-graphics-load=1",
