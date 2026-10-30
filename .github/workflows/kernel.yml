@@ -90,13 +90,6 @@ jobs:
         run: |
           SDKROOT="$(xcrun --sdk iphoneos --show-sdk-path)" ./unixnu build kernel -D ../device
 
-      - name: Build the payload
-        working-directory: UniXNU
-        run: |
-          ./unixnu build payload -D ../device --unique-chip-id 0x3b61b8fa
-          OUT=$(python3 -c "import json;print(json.load(open('/tmp/status.json'))['output'])")
-          ls -l "$OUT/payload"
-
       - name: Fetch the firmware volume
         run: |
           mkdir -p fw
@@ -105,6 +98,15 @@ jobs:
           ls -l fw/SILICIUM_UEFI.fd
           git clone --depth 1 -q https://github.com/gs240333/Mu-Silicium.git mu-wayne
           ls mu-wayne/Resources/Configs/wayne.toml
+
+      # --uefi is needed here as well: the entry probe and panic screen take their
+      # font from Mu-Silicium's FrameBufferSerialPortLib.
+      - name: Build the payload
+        working-directory: UniXNU
+        run: |
+          ./unixnu build payload -D ../device --uefi ../mu-wayne --unique-chip-id 0x3b61b8fa
+          OUT=$(python3 -c "import json;print(json.load(open('/tmp/status.json'))['output'])")
+          ls -l "$OUT/payload"
 
       - name: Pack the boot image
         working-directory: UniXNU
