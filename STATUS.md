@@ -122,3 +122,40 @@ tools\platform-tools\fastboot.exe boot wayne-uefi\wayne-uefi\Mu-wayne.img
 下一步：把 `UniXNU/DarwinBoot`（revision `3325e352d7df68a9f9ad74832ed94a6acbbd7390`，
 `drivers/DarwinBoot`，EDK2 包 `DarwinBootPkg`）克隆进 Mu-Silicium 检出目录，
 在 `wayne.dsc` / `wayne.fdf` 里加入 `DarwinBootPkg/Driver/DarwinBoot.inf`，重建 FD。
+
+## 真机里程碑：DarwinBoot → XNU 入口（2026-10-30）
+
+手机屏幕实拍（用户提供）显示 UniXNU 菜单 + DarwinBoot 日志：
+
+```
+UniXNU  version 0.1.0
+config: \EFI\UniXNU\unixnu.toml
+1  xnu
+
+DARWINBOOT: ARM64 va=0xFFFFFFF00427C000 pa=0xA007C000 args=0xA41B4000 entry=0xA31F0488 owned=0x10000000
+DARWINBOOT: video base=0x9D400000 display=1 row=4320 width=1080 height=2160 depth=32
+DARWINBOOT: command line: -v serial=3 debug=0x14e keepsyms=1
+DARWINBOOT: inputs validated; exiting boot services
+```
+
+关键结论：
+
+- **payload 从 eMMC `cache` 分区的 FAT 卷加载成功**（`\EFI\UniXNU\unixnu.toml`），说明 UEFI 侧
+  eMMC（SdccDxe）→ PartitionDxe → Fat 全链路可用。
+- **DarwinBoot 拿到了正确的帧缓冲**：`0x9D400000`、1080x2160、depth 32 —— 正是"复用 ABL
+  已初始化 splash 缓冲、不写 wayne 专属 DisplayDxe"这个决策的结果。
+- `exiting boot services` 是 DarwinBoot 的最后一行，之后控制权交给 XNU 入口
+  （`entry=0xA31F0488`）。屏幕上没有出现内核输出，原因有二：
+  1. 第一版内核**没有显示组件**（`GopFramebuffer` 及其设备侧 `build-gop-legacy-display.py`
+     被暂时移除，因为该脚本依赖设备专属的内核符号探测）；
+  2. `serial=3` 走 UART `ttyMSM0`，但没有接串口线。
+
+## 下一阶段（内核 bring-up）
+
+1. 写 wayne 版 `build-gop-legacy-display.py`（或等价的 ADT `/chosen/video` 注入），把 DarwinBoot
+   已经拿到的 `0x9D400000` 帧缓冲交给 XNU `video_console`，这样内核日志能直接显示在屏幕上。
+2. XNU 侧 eMMC：把 `CloverSdhci`/`CloverBlock`（同 SDM660 sdhci@0xc0c4000）做成 format-2 组件，
+   替换 `RamBlock`；之后再谈 APFS root。
+3. 触摸（focaltech fts @0xc175000 addr 0x38）与 FRC/显示时序。
+4. 每轮都要注意：**不要写 boot 分区**，ABL 对未签名镜像会让机器进"拒绝启动"状态，
+   恢复需要拔线断电。
