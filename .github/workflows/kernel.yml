@@ -101,9 +101,11 @@ jobs:
           d = Path('../device/configs/wayne_defconfig')
           d.write_text(d.read_text().replace('CONFIG_XNU_SHENG_PMGR=y', 'CONFIG_XNU_SHENG_PMGR=n'))
           PY
+          ./unixnu defconfig "$DEFCONFIG" -D ../device
           SDKROOT="$(xcrun --sdk iphoneos --show-sdk-path)" ./unixnu build kernel -D ../device
           cp /tmp/board.toml.keep ../device/board.toml
           cp /tmp/wayne_defconfig.keep ../device/configs/wayne_defconfig
+          ./unixnu defconfig "$DEFCONFIG" -D ../device
           OUT=$(python3 -c "import json;print(json.load(open('/tmp/status.json'))['output'])")
           ls -l "$OUT/kernel/kernel.macho"
 
