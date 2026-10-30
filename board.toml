@@ -71,6 +71,9 @@ kernel_args = [
   "boot-progress=2",
   "allow_legacy_mach_msg=1",
   "armcpu-timer-intid=19",
+  # The PMGR nub returns without touching anything unless this argument is 2,
+  # and AMFI waits for the ApplePMGRNub it publishes.
+  "clover-pmgr=2",
   "-no_slto_panic",
   "ml-timeout-lock-panic-scale=40",
   "offline-mobile-graphics-load=1",
