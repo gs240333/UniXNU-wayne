@@ -189,3 +189,28 @@ DARWINBOOT: inputs validated; exiting boot services
   两者只能二选一。
 - UniXNU 的 `bootstrap pass` 会在链接处失败（mockfs 等符号未定义），这是**设计如此**，
   只要 `startup.o.json` 生成就会被容错——不要把它当成构建错误。
+
+## 最新一次二分结果（2026-10-30 05:50）
+
+在照搬 clover 全套参数（`chip_id=0x13d`、`owned=0x40000000`、`dram_size=0x80000000`、
+`armcpu-timer-intid=19`、`boot-progress=2`、`offline-legacy-*`）之后：
+
+| 构建 | 内容 | 真机结果 |
+| --- | --- | --- |
+| p19/p20 | 无 `serial=3` + `_PE_init_cpu` 前探针 | 停在色条（未到该调用点） |
+| p21 | 加上板级 ArmCpu（定时器改 19） | 仍停在色条 |
+| p22 | 只开 panic 屏、去掉探针 | **没有 panic 文字** → 是真挂死，不是 panic |
+
+结论：卡点是 `arm_vm_init` 返回后、`PE_init_cpu` 调用前的那两次调用，即
+`PE_init_printf` 或 `PE_init_platform(TRUE)`（`ArmDTPlatform::configure()`）。
+因为 `PE_init_cpu` 还没执行，ArmCpu 还没 start，定时器/GIC 也还没初始化，
+所以这段里的任何 `IOSleep` 类定时等待都会永久挂住。
+
+### 下一步（已缩小到很小的范围）
+
+1. 分别在 `_PE_init_printf`、第二次 `_PE_init_platform` 的调用点加探针，确定是哪一个。
+2. 若是 `configure()`：把 stock `wayne.dts` 里的 timer / uart / sdhci 等节点按
+   `unixnu,adt-name` 补进 `dts/wayne.dts`（clover 的 ADT 节点更全），再测。
+3. 存储：clover 的 `CloverSdhci.cpp`(397KB) / `CloverBlock.cpp`(145KB) 是重度设备定制，
+   且 `CloverBlock` 硬编码了自己的 userdata 窗口常量（wayne 的分区号与之不同），
+   要移植必须按 wayne 的 `mmcblk0p64` 改常量，不能直接照抄。
