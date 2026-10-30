@@ -55,23 +55,44 @@ pagesize = 4096
 
 [payload]
 volume = "WAYNEESP"
-size_mib = 54
+size_mib = 56
 loader = "firmware"
 title = "UniXNU"
-kernel_args = ["-v", "keepsyms=1"]
-panic_screen = false
-# Entry probe. Stage 3 resets 10 s after the MMU is enabled; with
-# entry_probe_reset_after the reset moves after the named call, so a reboot
-# answers "did the kernel get past this symbol?".
-entry_probe_reset_delay = 10
-entry_probe_reset_after = "_bsd_init"
-entry_probe_reset_in = "_kernel_bootstrap_thread"
-entry_probe_reset_occurrence = 1
+dram_size = "0x80000000"
+# Copied from the reference SDM660 port (UniXNU-clover): the same SoC, the same
+# eMMC, the same 2 GiB low bank. armcpu-timer-intid=19 is the SDM660 arch timer
+# PPI; boot-progress=2 and the offline-legacy-* set enable the patched boot path.
+entry_probe_reset_delay = 15
+entry_probe_reset_after = "_machine_startup"
 entry_probe_reset_before = true
+entry_probe_reset_in = "_arm_init"
+entry_probe_reset_occurrence = 1
+panic_screen = true
+kernel_args = [
+  "-v",
+  "serial=3",
+  "debug=0x14e",
+  "kt_fixed_zones=120",
+  "boot-progress=2",
+  "allow_legacy_mach_msg=1",
+  "armcpu-timer-intid=19",
+  "-no_slto_panic",
+  "ml-timeout-lock-panic-scale=40",
+  "cs_enforcement_disable=1",
+  "offline-mobile-graphics-load=1",
+  "offline-legacy-register=1",
+  "offline-legacy-phase=4",
+  "offline-legacy-gop=1",
+  "offline-legacy-pm=1",
+  "offline-legacy-validate=1",
+  "offline-legacy-transfer=1",
+  "offline-legacy-retire=1",
+  "panic_on_crash_disabled=1",
+]
 
 [payload.adt]
-owned_memory_size = "0x20000000"
-chip_id = "8011"
+chip_id = "0x13d"
+owned_memory_size = "0x40000000"
 unique_chip_id = "required"
 
 [userdata]

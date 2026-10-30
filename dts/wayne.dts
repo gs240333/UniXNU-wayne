@@ -20,8 +20,10 @@
 
 	memory {
 		device_type = "memory";
-		/* Bank 1 ends at 0x100000000 and bank 2 starts there. */
-		reg = <0x00 0x80000000 0x00 0xfe4c0000>;
+		/* The low bank only: 0x80000000-0x100000000. The high bank and the
+		 * 0xa0000000-0x100000000 hole belong to PIL, venus, the splash and the
+		 * firmware volume, which is why the reference SDM660 port owns 1 GiB. */
+		reg = <0x00 0x80000000 0x00 0x80000000>;
 	};
 
 	cpus {
