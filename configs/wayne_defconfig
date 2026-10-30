@@ -1,41 +1,29 @@
-# Kernel configuration of the wayne image, selected by [kernel] defconfig in board.toml.
-# Derived from clover_defconfig (same SDM660, same eMMC, same Adreno 512, same ARMv8.0).
+# Kernel configuration for wayne (Xiaomi MI 6X, SDM660), format 2.
+#
+# Archive builders and component recipes come from [kernel] archives in
+# board.toml; this file only carries the switches.
 
-CONFIG_XNU_SOURCE_CORECRYPTO14=y
 CONFIG_XNU_BUILD_ARCHIVES=y
+CONFIG_XNU_SOURCE_CORECRYPTO14=y
 CONFIG_XNU_SOURCE_PTHREAD=y
+CONFIG_XNU_SOURCE_MOCKFS=y
 CONFIG_XNU_ARM_DT_PLATFORM=y
 CONFIG_XNU_ARMCPU=y
 CONFIG_XNU_NATIVE_AES=y
-CONFIG_XNU_TRUST_CACHE_RUNTIME=y
-CONFIG_XNU_SOURCE_MOCKFS=y
-CONFIG_XNU_NATIVE_CS_HASH_CACHE=y
 CONFIG_XNU_NATIVE_ARCH_TIMER=y
-# AMFI "No PMGR?" hook; clover publishes ApplePMGRNub via build-clover-pmgr.py.
-# ROUND 1: disabled — build-clover-pmgr.py audits a previous kernel.macho, which a
-# fresh tree does not have yet. Re-enable (y) after the first kernel.macho exists.
-CONFIG_XNU_SHENG_PMGR=n
-# Kryo 260 is ARMv8.0: no PSTATE.PAN. Must stay off.
-CONFIG_XNU_NATIVE_PAN=n
-
+CONFIG_XNU_TRUST_CACHE_RUNTIME=y
+CONFIG_XNU_NATIVE_CS_HASH_CACHE=y
 CONFIG_XNU_CRYPTO_BOOTSTRAP="prelinked"
 
-# Reuse clover's archives verbatim: same eMMC (sdhc_1@c0c4000), same PM660/PM660L,
-# same ARMv8.0. The display stub is an empty resolution-agnostic link shim, so nothing
-# here needs a wayne variant — resolution lives in make-wayne-adt.py, not in the stub.
-# ROUND 1: libCloverBlock.a omitted — build-clover-block.py also audits a previous
-# kernel.macho. Re-add it after the first kernel.macho exists.
-CONFIG_XNU_EXTRA_LD_ARCHIVES="{tree}/build/clover-display-stub/libCloverDisplayStub.a {tree}/build/clover-sdhci/libCloverSdhci.a"
+# Kryo 260 is ARMv8.0-A: PSTATE.PAN is not implemented.
+CONFIG_XNU_NATIVE_PAN=n
 
-# Same set of "not a switch to flip" notes as clover:
-#   NATIVE_UFS=n   — wayne is expected eMMC (sdhc_1 @ 0xc0c4000), like clover. VERIFY first.
-#   NATIVE_ADRENO=n— Adreno 512 has no native XNU driver (sheng's targets Adreno 740).
-#   NATIVE_MOBILE_DISPLAY=n — MDP5/DSI bring-up not started.
-#   BOOT_PROGRESS=n — gated behind storage/owner layers clover hasn't reached yet.
+# Not selected yet: no native storage, GPU, display or platform power driver.
 CONFIG_XNU_ARMVIRT_PLATFORM=n
 CONFIG_XNU_BOOT_PROGRESS=n
 CONFIG_XNU_NATIVE_UFS=n
 CONFIG_XNU_NATIVE_ADRENO=n
 CONFIG_XNU_NATIVE_MOBILE_DISPLAY=n
+CONFIG_XNU_SHENG_PMGR=n
 
 CONFIG_XNU_EXTRA_CFLAGS="-Wno-reserved-identifier -Wno-pre-c11-compat -Wno-missing-designated-field-initializers -Wno-suggest-override -Wno-suggest-destructor-override -Wno-ms-bitfield-padding"
