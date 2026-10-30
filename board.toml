@@ -47,7 +47,7 @@ DEVICE_MODEL = "wayne"
 
 [bootimg.image]
 header_version = 0
-base = 0x00000000
+base = 0x10000000
 kernel_offset = 0x00008000
 ramdisk_offset = 0x01000000
 tags_offset = 0x00000100
