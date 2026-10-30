@@ -1555,6 +1555,7 @@ static const dev_t kNoDevice = static_cast<dev_t>(-1);
 // them long after this run returns, so the SystemOS media is retained; the OS volume is only needed
 // as a number because root-matching already holds its media.
 static volatile dev_t gOsVolumeDev = kNoDevice;
+static volatile dev_t gOsWholeDev = kNoDevice;
 static volatile dev_t gSystemVolumeDev = kNoDevice;
 static IOMedia *gSystemVolumeMedia = nullptr;
 // Round159's Data volume. Unlike SystemOS this one is attached read-write, so its media has to stay
@@ -1925,8 +1926,27 @@ static void prepareApfsBoot(IOMedia *whole)
   if (named) {
     gOsVolumeDev = volumeDev(major, minor);
   }
-  IOLog("CloverBlock r145: os vu=%s bsd=%s %u:%u p=%u\n", kRootVolumeUuid,
-        devname ? devname : "?", major, minor, passes);
+  // wayne: root-matching needs an IOMedia whose "UUID" property is the root
+  // volume's. The volume node itself is an AppleAPFSVolume, not an IOMedia, so
+  // the match dictionary never lands on it; publish the UUID on the window's
+  // whole media as well, which is an IOMedia and is named by IOMediaBSDClient.
+  {
+    OSString *uuidString = OSString::withCString(kRootVolumeUuid);
+    if (!uuidString || !whole->setProperty("UUID", uuidString)) {
+      OSSafeReleaseNULL(uuidString);
+      fail("uuidprop", 0);
+    }
+    OSSafeReleaseNULL(uuidString);
+    const char *wholeName = nullptr;
+    uint32_t wholeMajor = 0xffffffff;
+    uint32_t wholeMinor = 0xffffffff;
+    if (volumeBsd(whole, &wholeName, &wholeMajor, &wholeMinor)) {
+      gOsWholeDev = volumeDev(wholeMajor, wholeMinor);
+    }
+  }
+  IOLog("CloverBlock r145: os vu=%s bsd=%s %u:%u p=%u whole=%u\n", kRootVolumeUuid,
+        devname ? devname : "?", major, minor, passes,
+        static_cast<unsigned>(gOsWholeDev));
   volume->release();
   if (!named) {
     fail("apfsbsd", passes);
@@ -2568,13 +2588,9 @@ extern "C" int native_verified_block_root_authorized(dev_t device)
   }
   // Data is deliberately absent: it is mounted read-write at /private/var and is never a root,
   // never a shared-cache cache, and never the SystemOS volume the owner mount unions onto "/".
-  // wayne probe: the owner mount asks about a device this file may never have named, so say which
-  // device it asked about and which ones were named, on the screen.
-  if (device != gOsVolumeDev && device != gSystemVolumeDev) {
-    panic("CB root: dev=%u os=%u sys=%u sysvol=%d", (unsigned)device, (unsigned)gOsVolumeDev,
-          (unsigned)gSystemVolumeDev, gSystemVolumeMedia ? 1 : 0);
-  }
-  return device == gOsVolumeDev || device == gSystemVolumeDev;
+  // The root device the kernel mounts is the window's whole media (its "UUID" property is what
+  // root-matching lands on), so it is authorized together with the volume numbers.
+  return device == gOsVolumeDev || device == gSystemVolumeDev || device == gOsWholeDev;
 }
 
 static void le64Store(uint8_t *at, uint64_t value)
