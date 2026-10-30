@@ -4,6 +4,9 @@ name: Data seed
 # appends a 32 MiB APFS container after SystemOS and hands the owner mount its
 # UUID; the generator behind it is not published, so this builds the same shape
 # here and prints the volume UUID that has to go into CloverBlock.cpp.
+#
+# The UUID is random per run, so always take the artifact and the UUID from the
+# same run.
 on:
   workflow_dispatch:
 
@@ -15,51 +18,28 @@ jobs:
     runs-on: macos-26
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Build the APFS Data volume
+      - name: Build the APFS Data volume and read it back
         run: |
           set -eux
           hdiutil create -size 32m -fs APFS -volname Data -type UDIF -ov /tmp/data.dmg
           hdiutil attach -readwrite -nobrowse -noautoopen -plist /tmp/data.dmg > /tmp/attach.plist
-          python3 - <<'PY'
-          import plistlib
-          data = plistlib.load(open('/tmp/attach.plist', 'rb'))
-          for entity in data.get('system-entities', []):
-              if 'dev-entry' in entity:
-                  print('dev:', entity['dev-entry'], 'mount:', entity.get('mount-point', ''))
-          PY
-          diskutil apfs list -plist > /tmp/apfs.plist
-          diskutil apfs list $DEV | tee /tmp/apfs.txt
-          diskutil apfs list $DEV | grep -A6 'Name:' | tee /tmp/data.txt
-          python3 - <<'PY'
-          import plistlib
-          data = plistlib.load(open('/tmp/apfs.plist', 'rb'))
+          DEV=$(python3 -c "import plistlib;d=plistlib.load(open('/tmp/attach.plist','rb'));print([e['dev-entry'] for e in d['system-entities'] if 'dev-entry' in e][0])")
+          echo "device: $DEV"
+          diskutil apfs list "$DEV"
+          UUID=$(diskutil apfs list -plist "$DEV" | python3 -c "
+          import plistlib, sys
+          data = plistlib.load(sys.stdin.buffer)
           for container in data.get('Containers', []):
               for volume in container.get('Volumes', []):
-                  print('volume', volume.get('Name'), 'uuid',
-                        volume.get('APFSVolumeUUID') or volume.get('VolumeUUID'))
-          PY
-
-      - name: Read the seed out of the attached device
-        run: |
-          set -eux
-          DEV=$(python3 - <<'PY'
-          import plistlib
-          data = plistlib.load(open('/tmp/attach.plist', 'rb'))
-          for entity in data.get('system-entities', []):
-              if 'dev-entry' in entity:
-                  print(entity['dev-entry'])
-                  break
-          PY
-          )
-          echo "device: $DEV"
+                  if volume.get('Name') == 'Data':
+                      print((volume.get('APFSVolumeUUID') or volume.get('VolumeUUID') or '').upper())
+          " | head -1)
+          echo "DATA_UUID=$UUID"
           RAW=$(printf '%s' "$DEV" | sed 's#/dev/disk#/dev/rdisk#')
           dd if="$RAW" of="$GITHUB_WORKSPACE/data-seed.img" bs=1m count=32
-          UUID=$(diskutil info -plist /Volumes/Data | python3 -c "import plistlib,sys;d=plistlib.load(sys.stdin.buffer);print((d.get('APFSVolumeUUID') or d.get('VolumeUUID') or '').upper())" | head -1)
-          echo "DATA_UUID=$UUID" >> "$GITHUB_ENV"
-          ls -l "$GITHUB_WORKSPACE/data-seed.img"
           hdiutil detach "$DEV"
+          ls -l "$GITHUB_WORKSPACE/data-seed.img"
+          echo "DATA_UUID=$UUID" >> "$GITHUB_ENV"
 
       - name: Summary
         if: always()
