@@ -318,3 +318,31 @@ clover 仓库里 `append-data-window.py` 引用的 `scripts/prepare-owner-data-f
 2. `kSystemOsVolumeUuid` 仍是 clover 的值（`8846FE78-…`），需核对我们 SystemOS 卷的真实 UUID。
 3. 可能需要 `native_ram_block_volume_seed()` 路径或 owner-mount 补丁（clover 的
    `zzy-clover-owner-root-trust.patch` / `zzy-clover-systemos-mount.patch` 系列尚未移植）。
+
+## owner-mount 已编入，最后一堵墙是 root media 匹配（2026-10-30 18:10）
+
+移植了 clover 的 `sdm660-owner-mount.patch`（打开 base 树里 `XNU_OWNER_*` 的 manifest/SystemOS/Data 路径），
+并解决了两个工程问题：
+
+- 首遍（seed）没有归档 → 五个 `native_*` 契约符号缺失 → 给 `wayne-board-stubs.c` 加了 **weak 桩**；
+- seed 阶段必须保留 stubs 归档，否则该阶段失败会让 `set -e` 跳过配置恢复，主构建用错配置。
+
+真机现状：panic 行号从 984 变成 **994**（补丁已生效），但仍是
+`Failed to mount root device @IOKitBSDInit.cpp:994`，且新加的诊断 panic（`CB root:`）
+**没有触发** → 说明 `native_verified_block_root_authorized()` 根本没被调用，
+失败发生在更早的 `IOService::waitForService(matching)`：按 ADT 里
+
+```
+<key>IOPropertyMatch</key><dict><key>UUID</key><string>04769D26-2CA0-4825-B443-E2E5F88300F2</string></dict>
+```
+
+找不到 IOMedia。也就是发布时机或 UUID 属性还没对上。
+
+### 下一步（按可能性排序）
+
+1. 确认 `clover_block_run()` 的发布时间早于 `bsd_init()` 的 root 等待；
+   CloverBlock 里 mode 3 在 PMGR 钩子里发布，若晚于等待就会空 matchlist（clover r143/r144 踩过）。
+2. 在 `publishOsVolume()` 成功后加诊断 panic，打印卷的 BSD 名与 UUID 属性，
+   证明 kernel 能看到的属性名/大小写与 ADT 一致。
+3. 把 root 选择切到 manifest 路径（`XNU_OWNER_BOOT_MANIFEST` 的真正用法），
+   由 `native_verified_block_volume_device()` 直接给出 dev_t。
