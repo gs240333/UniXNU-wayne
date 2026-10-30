@@ -106,7 +106,12 @@ jobs:
           b.write_text(text)
           d = Path('../device/configs/wayne_defconfig')
           t = d.read_text().replace('CONFIG_XNU_SHENG_PMGR=y', 'CONFIG_XNU_SHENG_PMGR=n')
-          t = re.sub(r'^CONFIG_XNU_EXTRA_LD_ARCHIVES=.*$', '', t, flags=re.M)
+          # The owner mount makes the kernel reference the block-stack contract, so
+          # this pass still links the weak stubs archive; everything that audits the
+          # prelinked kernel stays out.
+          t = re.sub(r'^CONFIG_XNU_EXTRA_LD_ARCHIVES=.*$',
+                     'CONFIG_XNU_EXTRA_LD_ARCHIVES="{tree}/build/wayne-board-stubs/libWayneBoardStubs.a"',
+                     t, flags=re.M)
           d.write_text(t)
           PY
           ./unixnu defconfig "$DEFCONFIG" -D ../device
