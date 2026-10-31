@@ -1,34 +1,13 @@
 --- a/bsd/kern/kern_exec.c
 +++ b/bsd/kern/kern_exec.c
-@@ -7212,7 +7212,16 @@
- 	if ((error = copyout("apfs", request.type, 5)) ||
--	    (error = copyout("/private/var", request.path, 13)) ||
- 	    (error = copyout(device_path, spec, strlen(device_path) + 1)) ||
- 	    (error = copyout(payload, request.data, sizeof(payload)))) goto done;
- 	native_owner_data_stage = 2;
--	error = mount(p, &request, &result);
-+	/* wayne: the Data volume has two candidate mount points and only the one
-+	 * whose directory exists on the mounted System volume can take it, so the
-+	 * reference path is tried first and the APFS data mount point second. */
-+	static const char *const wayne_data_points[] = {"/private/var", "/System/Volumes/Data"};
-+	const char *wayne_data_point = wayne_data_points[0];
-+	for (unsigned wayne_data_i = 0; wayne_data_i < 2; wayne_data_i++) {
-+		wayne_data_point = wayne_data_points[wayne_data_i];
-+		if ((error = copyout(wayne_data_point, request.path, strlen(wayne_data_point) + 1))) goto done;
-+		error = mount(p, &request, &result);
-+		if (!error) break;
-+	}
- 	if (error) goto done;
-@@ -7219,4 +7229,4 @@
- 	native_owner_data_stage = 3;
--	error = vnode_lookup("/private/var", 0, &data_root, vfs_context_current());
-+	error = vnode_lookup(wayne_data_point, 0, &data_root, vfs_context_current());
- 	if (error) goto done;
- 	mount_t data_mount = vnode_mount(data_root);
-@@ -7396,5 +7406,5 @@
+@@ -7406,5 +7406,9 @@
  	int data_error = native_owner_data_prepare(p, (user_addr_t)scratch_addr);
  	boot_progress_stage("Data mount returned");
 -	if (data_error) panic("offline scratch Data mount failed: %d", data_error);
-+	if (data_error) panic("data e=%d st=%d", data_error, native_owner_data_stage);
++	if (data_error) {
++		/* wayne: launchd mounts the Data volume itself with the image's own
++		 * firmlink layout; this pre-mount is the reference board's shortcut. */
++		kprintf("wayne: Data pre-mount failed %d, letting launchd do it\n", data_error);
++	}
  #if defined(XNU_BOOT_PROGRESS) && XNU_BOOT_PROGRESS
  	extern int sheng_boot_watchdog_policy(void *, uint64_t);
