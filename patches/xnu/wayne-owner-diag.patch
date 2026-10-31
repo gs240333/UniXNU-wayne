@@ -17,21 +17,23 @@
 +	if (data_error) panic("data e=%d st=%d %s", data_error, native_owner_data_stage, native_owner_data_device_path);
  #if defined(XNU_BOOT_PROGRESS) && XNU_BOOT_PROGRESS
  	extern int sheng_boot_watchdog_policy(void *, uint64_t);
-@@ -7394,4 +7398,18 @@
+@@ -7394,4 +7398,20 @@
  	user_addr_t init_envp = USER_ADDR_NULL;
  #if defined(XNU_OWNER_CACHE_MOUNT) && XNU_OWNER_CACHE_MOUNT
 +	{
 +		vnode_t wayne_probe = NULLVP;
 +		int wayne_bits = 0;
-+		static const char *const wayne_paths[] = {"/sbin/launchd", "/System", "/private",
-+		    "/private/var", "/System/Volumes/Data", "/usr/lib/dyld"};
-+		for (unsigned wayne_i = 0; wayne_i < 6; wayne_i++) {
-+			wayne_probe = NULLVP;
-+			if (vnode_lookup(wayne_paths[wayne_i], 0, &wayne_probe, vfs_context_current())) {
-+				wayne_bits |= 1 << wayne_i;
-+			}
-+			if (wayne_probe) vnode_put(wayne_probe);
++		if (vnode_lookup("/sbin/launchd", 0, &wayne_probe, vfs_context_current())) {
++			wayne_bits |= 1;
 +		}
++		if (wayne_probe) {
++			vnode_put(wayne_probe);
++			wayne_probe = NULLVP;
++		}
++		if (vnode_lookup("/System/Library", 0, &wayne_probe, vfs_context_current())) {
++			wayne_bits |= 2;
++		}
++		if (wayne_probe) vnode_put(wayne_probe);
 +		panic("fs %x", wayne_bits);
 +	}
  	boot_progress_stage("SystemOS mount enter");
