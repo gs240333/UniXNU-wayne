@@ -33,6 +33,9 @@ CONFIG_XNU_NATIVE_MOBILE_DISPLAY=n
 CONFIG_XNU_SHENG_PMGR=y
 # The PMGR nub calls the board eMMC/input/power/DSP entry points; they are empty
 # until those drivers are ported, and a missing symbol fails the kernel link.
-CONFIG_XNU_EXTRA_LD_ARCHIVES="{tree}/build/wayne-board-stubs/libWayneBoardStubs.a {tree}/build/clover-sdhci/libCloverSdhci.a {tree}/build/clover-block/libCloverBlock.a"
+# The board archives come first: the stubs archive holds weak definitions of the
+# block-stack contract for the seed pass, and the linker would otherwise take the
+# weak clover_block_run instead of the driver's strong one.
+CONFIG_XNU_EXTRA_LD_ARCHIVES="{tree}/build/clover-sdhci/libCloverSdhci.a {tree}/build/clover-block/libCloverBlock.a {tree}/build/wayne-board-stubs/libWayneBoardStubs.a"
 
 CONFIG_XNU_EXTRA_CFLAGS="-Wno-reserved-identifier -Wno-pre-c11-compat -Wno-missing-designated-field-initializers -Wno-suggest-override -Wno-suggest-destructor-override -Wno-ms-bitfield-padding"
