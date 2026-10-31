@@ -19,7 +19,7 @@ import sys
 import zipfile
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path.cwd()
 IPSW = ROOT / 'refer/iPad_Pro_HFR_17.7.11_21H461_Restore.ipsw'
 STATIC = ROOT / '.cache/firmware/target-volumes/static-trustcache.bin'
 
