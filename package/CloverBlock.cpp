@@ -1897,6 +1897,14 @@ static void volumeMountLadder(IOMedia *whole, IOMedia *volume, IOService *client
 // same container.
 static void prepareApfsBoot(IOMedia *whole)
 {
+  // A window is a bare APFS container: the kext matches medias by content hint,
+  // and the hint normally comes from a partition scheme this media does not have.
+  {
+    OSSharedPtr<OSString> hint = OSString::withCString("Apple_APFS");
+    if (hint) {
+      whole->setProperty("Content", hint.get());
+    }
+  }
   kern_return_t loaded = OSKextLoadKextWithIdentifier(kApfsKext);
   if (loaded) {
     fail("apfsload", static_cast<uint32_t>(loaded));
@@ -1910,7 +1918,17 @@ static void prepareApfsBoot(IOMedia *whole)
     }
   }
   if (!volume) {
-    fail("apfsvol", passes);
+    uint32_t apfsNodes = 0;
+    OSSharedPtr<OSIterator> kids = whole->getChildIterator(gIOServicePlane);
+    if (kids) {
+      while (OSObject *object = kids->getNextObject()) {
+        IORegistryEntry *child = OSDynamicCast(IORegistryEntry, object);
+        if (child && child->metaCast(kApfsVolumeClass)) {
+          apfsNodes++;
+        }
+      }
+    }
+    panic("apfsvol n=%u nodes=%u", passes, apfsNodes);
   }
   // The UUID is what root-matching matches, and the BSD name/major/minor are what IOFindBSDRoot turns
   // into rootdev. They are published by different clients after the media exists, so returning as soon
