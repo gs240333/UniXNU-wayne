@@ -143,6 +143,12 @@ jobs:
       # its mount. build-original-system-trust.py bundles the two unchanged
       # Apple modules from the target IPSW, and --owner-trust-cache is the input
       # that carries them without the board allow-list.
+      - name: Restore the target IPSW
+        uses: actions/cache@v4
+        with:
+          path: UniXNU/refer
+          key: wayne-ipsw-ipad-17.7.11-21H461
+
       - name: Build the original trust bundle
         working-directory: UniXNU
         run: |
@@ -152,6 +158,13 @@ jobs:
               https://updates.cdn-apple.com/2025SpringFCS/fullrestores/122-77166/DCA6CFE8-90E9-4B92-880D-3DE171798E40/iPad_Pro_HFR_17.7.11_21H461_Restore.ipsw
           fi
           ls -l refer/
+          # The bundle builder wants the target's static trust cache staged where
+          # the reference tree keeps it.
+          ./unixnu ipsw fetch StaticTrustCache -D ../device
+          STATIC=$(find out -name '*.dmg.trustcache' | head -1)
+          mkdir -p .cache/firmware/target-volumes
+          cp "$STATIC" .cache/firmware/target-volumes/static-trustcache.bin
+          ls -l .cache/firmware/target-volumes/
           python3 scripts/build-original-system-trust.py
           ls -l build/original-static-system-trust/
 
