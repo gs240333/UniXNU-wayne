@@ -63,18 +63,21 @@ jobs:
           set -eux
           DMG=$(find . -name '044-76040-038.dmg' | head -1)
           echo "dmg: $DMG"
-          hdiutil attach -readonly -nobrowse -noautoopen "$DMG"
-          diskutil apfs list | head -40
-          VOL=$(diskutil apfs list -plist | python3 -c "
-          import plistlib, sys
-          data = plistlib.loads(sys.stdin.buffer.read())
-          for container in data.get('Containers', []):
-              for volume in container.get('Volumes', []):
-                  roles = volume.get('Roles') or []
-                  name = volume.get('Name') or ''
-                  if 'System' in roles or 'DawnUpdate' in name:
-                      print(volume.get('DeviceIdentifier') or volume.get('Device') or '')
-          " | head -1)
+          ATTACH=$(hdiutil attach -readonly -nobrowse -noautoopen "$DMG")
+          echo "$ATTACH"
+          DISK=$(printf '%s' "$ATTACH" | grep -oE '^/dev/disk[0-9]+' | head -1 | sed 's#/dev/##')
+          echo "image disk: $DISK"
+          diskutil apfs list | head -80
+          # Only volumes carved out of the image's own disk are candidates: the
+          # runner's startup volume also has a System role.
+          VOL=$(diskutil apfs list | grep -E "APFS Volume Disk \(Role\):" \
+            | sed -E 's/.*:[[:space:]]*(disk[0-9]+s[0-9]+)[[:space:]]*\(([A-Za-z]+)\).*/\1 \2/' \
+            | awk -v d="$DISK" '$1 ~ "^" d "s" && $2 == "System" {print $1}' | head -1)
+          if [ -z "$VOL" ]; then
+            VOL=$(diskutil apfs list | grep -E "APFS Volume Disk \(Role\):" \
+              | sed -E 's/.*:[[:space:]]*(disk[0-9]+s[0-9]+).*/\1/' \
+              | grep -E "^${DISK}s[0-9]+$" | head -1)
+          fi
           echo "system volume: $VOL"
           if [ -z "$VOL" ]; then echo "no system volume found"; exit 1; fi
           diskutil mount "$VOL"
