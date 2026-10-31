@@ -1895,6 +1895,22 @@ static void volumeMountLadder(IOMedia *whole, IOMedia *volume, IOService *client
 // mount at exec re-checks the root device against native_verified_block_root_authorized(), so the
 // number latched here has to be the number the root search will mount, not merely a volume in the
 // same container.
+// The APFS kext has to be in the catalogue before a media is registered, or its
+// personalities are never matched against that media: the media was published
+// and named, and no AppleAPFSVolume ever appeared under it.
+static void loadApfsKext(void)
+{
+  static bool loaded = false;
+  if (loaded) {
+    return;
+  }
+  kern_return_t status = OSKextLoadKextWithIdentifier(kApfsKext);
+  if (status) {
+    fail("apfsload", static_cast<uint32_t>(status));
+  }
+  loaded = true;
+}
+
 static void prepareApfsBoot(IOMedia *whole)
 {
   // A window is a bare APFS container: the kext matches medias by content hint,
@@ -1905,10 +1921,7 @@ static void prepareApfsBoot(IOMedia *whole)
       whole->setProperty("Content", hint.get());
     }
   }
-  kern_return_t loaded = OSKextLoadKextWithIdentifier(kApfsKext);
-  if (loaded) {
-    fail("apfsload", static_cast<uint32_t>(loaded));
-  }
+  loadApfsKext();
   IOMedia *volume = nullptr;
   uint32_t passes = 0;
   for (; passes < 12000 && !volume; passes++) {
@@ -2421,6 +2434,7 @@ extern "C" void clover_block_run(void)
     // same exec, through native_ram_block_volume_seed(), and that call is what attaches it. Only its
     // geometry is proven above, because a manifest without Data has to stop before the root mount
     // rather than mount a root whose /private/var can never be seeded.
+    loadApfsKext();
     whole = publishWindow(osFirst, osSectors, true, &device);
     prepareApfsBoot(whole);
     IOLog("CloverBlock r159: boot os=%u+%u system=%u+%u data=%u+%u fires=%u deferred=1\n",
