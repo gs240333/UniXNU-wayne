@@ -1,0 +1,19 @@
+--- a/bsd/kern/kern_exec.c
++++ b/bsd/kern/kern_exec.c
+@@ -7100,4 +7100,8 @@
+ 	cache_authorized = cache_authorized && native_union;
+ #endif
+-	if (!cache_authorized) { error = EAUTH; goto done; }
++	if (!cache_authorized) {
++		panic("ca ro=%d m=%x s=%x u=%d", native_owner_cache_readonly,
++		    (unsigned)native_owner_cache_mounted_device,
++		    (unsigned)native_owner_cache_selected_device, native_owner_cache_native_union);
++	}
+ 	native_owner_cache_stage = 5;
+@@ -7396,5 +7400,5 @@
+ 	int data_error = native_owner_data_prepare(p, (user_addr_t)scratch_addr);
+ 	boot_progress_stage("Data mount returned");
+-	if (data_error) panic("offline scratch Data mount failed: %d", data_error);
++	if (data_error) panic("data e=%d st=%d", data_error, native_owner_data_stage);
+ #if defined(XNU_BOOT_PROGRESS) && XNU_BOOT_PROGRESS
+ 	extern int sheng_boot_watchdog_policy(void *, uint64_t);
