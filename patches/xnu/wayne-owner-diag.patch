@@ -10,13 +10,6 @@
 +		    (unsigned)native_owner_cache_selected_device, native_owner_cache_native_union);
 +	}
  	native_owner_cache_stage = 5;
-@@ -7212,5 +7216,5 @@
- 	if ((error = copyout("apfs", request.type, 5)) ||
--	    (error = copyout("/System/Volumes/Data", request.path, 21)) ||
-+	    (error = copyout("/private/var", request.path, 13)) ||
- 	    (error = copyout(device_path, spec, strlen(device_path) + 1)) ||
- 	    (error = copyout(payload, request.data, sizeof(payload)))) goto done;
- 	native_owner_data_stage = 2;
 @@ -7396,5 +7400,14 @@
  	int data_error = native_owner_data_prepare(p, (user_addr_t)scratch_addr);
  	boot_progress_stage("Data mount returned");
