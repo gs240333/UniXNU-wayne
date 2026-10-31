@@ -138,12 +138,30 @@ jobs:
           git clone --depth 1 -q https://github.com/gs240333/Mu-Silicium.git mu-wayne
           ls mu-wayne/Resources/Configs/wayne.toml
 
+      # The launchd image is in the trust cache; without a bundle the exec of
+      # /sbin/launchd fails with ENOEXEC and the sealed SystemOS volume refuses
+      # its mount. build-original-system-trust.py bundles the two unchanged
+      # Apple modules from the target IPSW, and --owner-trust-cache is the input
+      # that carries them without the board allow-list.
+      - name: Build the original trust bundle
+        working-directory: UniXNU
+        run: |
+          mkdir -p refer
+          if [ ! -f refer/iPad_Pro_HFR_17.7.11_21H461_Restore.ipsw ]; then
+            curl -fL --retry 3 -o refer/iPad_Pro_HFR_17.7.11_21H461_Restore.ipsw \
+              https://updates.cdn-apple.com/2025SpringFCS/fullrestores/122-77166/DCA6CFE8-90E9-4B92-880D-3DE171798E40/iPad_Pro_HFR_17.7.11_21H461_Restore.ipsw
+          fi
+          ls -l refer/
+          python3 scripts/build-original-system-trust.py
+          ls -l build/original-static-system-trust/
+
       # --uefi is needed here as well: the entry probe and panic screen take their
       # font from Mu-Silicium's FrameBufferSerialPortLib.
       - name: Build the payload
         working-directory: UniXNU
         run: |
-          ./unixnu build payload -D ../device --uefi ../mu-wayne --unique-chip-id 0x3b61b8fa
+          ./unixnu build payload -D ../device --uefi ../mu-wayne --unique-chip-id 0x3b61b8fa \
+            --owner-trust-cache build/original-static-system-trust/original-static-system.bundle
           OUT=$(python3 -c "import json;print(json.load(open('/tmp/status.json'))['output'])")
           ls -l "$OUT/payload"
 
