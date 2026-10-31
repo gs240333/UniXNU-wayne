@@ -1919,16 +1919,19 @@ static void prepareApfsBoot(IOMedia *whole)
   }
   if (!volume) {
     uint32_t apfsNodes = 0;
+    uint32_t children = 0;
+    const uint32_t named = property(whole, kBSDNameKey) ? 1u : 0u;
     OSSharedPtr<OSIterator> kids = whole->getChildIterator(gIOServicePlane);
     if (kids) {
       while (OSObject *object = kids->getNextObject()) {
         IORegistryEntry *child = OSDynamicCast(IORegistryEntry, object);
+        children++;
         if (child && child->metaCast(kApfsVolumeClass)) {
           apfsNodes++;
         }
       }
     }
-    panic("apfsvol n=%u nodes=%u", passes, apfsNodes);
+    panic("apfs nodes=%u kids=%u bsd=%u", apfsNodes, children, named);
   }
   // The UUID is what root-matching matches, and the BSD name/major/minor are what IOFindBSDRoot turns
   // into rootdev. They are published by different clients after the media exists, so returning as soon
