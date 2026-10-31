@@ -160,10 +160,11 @@ jobs:
           ls -l refer/
           # The bundle builder wants the target's static trust cache staged where
           # the reference tree keeps it.
-          ./unixnu ipsw fetch StaticTrustCache -D ../device
-          STATIC=$(find out -name '*.dmg.trustcache' | head -1)
+          STATIC=$(./unixnu ipsw fetch StaticTrustCache -D ../device | tail -1)
+          echo "static trust cache: $STATIC"
           mkdir -p .cache/firmware/target-volumes
           cp "$STATIC" .cache/firmware/target-volumes/static-trustcache.bin
+          shasum -a 256 .cache/firmware/target-volumes/static-trustcache.bin
           ls -l .cache/firmware/target-volumes/
           python3 scripts/build-original-system-trust.py
           ls -l build/original-static-system-trust/
