@@ -2784,21 +2784,22 @@ extern "C" int native_verified_block_volume_device(const char *uuid, dev_t *devi
                                                    size_t size)
 {
   if (!uuid || !device || !path || !size || strcmp(uuid, kSystemOsVolumeUuid) != 0) {
-    return 0;
+    panic("vdev arg %s", uuid ? uuid : "(null)");
   }
   IOMedia *media = publishSystemOs();
   if (!media) {
-    return 0;
+    panic("vdev publish");
   }
   const char *name = nullptr;
   uint32_t major = 0xffffffff;
   uint32_t minor = 0xffffffff;
   if (!volumeBsd(media, &name, &major, &minor)) {
-    return 0;
+    panic("vdev bsd");
   }
   const dev_t candidate = volumeDev(major, minor);
   if (candidate != gSystemVolumeDev || !native_verified_block_root_authorized(candidate)) {
-    return 0;
+    panic("vdev dev %x/%x", static_cast<unsigned>(candidate),
+          static_cast<unsigned>(gSystemVolumeDev));
   }
   IOLog("CloverBlock r145: owner system %s dev=%d\n", name, static_cast<int>(candidate));
   snprintf(path, size, "/dev/%s", name);

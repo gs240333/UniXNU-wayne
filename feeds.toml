@@ -8,7 +8,7 @@
 kind = "soc"
 name = "sdm660"
 git = "https://github.com/gs240333/UniXNU-sdm660-common.git"
-commit = "ee7113a90c966635dbbd43111b2370a0ed3afc53"
+commit = "3daeadd68f871612a6a120f17d35fdf7595e91f4"
 # SDM660 ArmCpu: the base driver arms the arch timer with PPI 27, this SoC raises
 # 19. The board copy takes the line from armcpu-timer-intid and changes nothing else.
 [[source]]
