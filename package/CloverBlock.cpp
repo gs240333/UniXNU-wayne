@@ -1931,37 +1931,7 @@ static void prepareApfsBoot(IOMedia *whole)
     }
   }
   if (!volume) {
-    uint32_t apfsNodes = 0;
-    uint32_t children = 0;
-    uint32_t tagA = 0, tagB = 0, tagC = 0;
-    OSSharedPtr<OSIterator> kids = whole->getChildIterator(gIOServicePlane);
-    if (kids) {
-      while (OSObject *object = kids->getNextObject()) {
-        IORegistryEntry *child = OSDynamicCast(IORegistryEntry, object);
-        uint32_t tag = 0;
-        if (child) {
-          const char *cls = child->getMetaClass()->getClassName();
-          if (cls) {
-            tag = static_cast<uint32_t>(static_cast<uint8_t>(cls[0])) |
-                  (static_cast<uint32_t>(static_cast<uint8_t>(cls[1])) << 8) |
-                  (static_cast<uint32_t>(static_cast<uint8_t>(cls[2])) << 16) |
-                  (static_cast<uint32_t>(static_cast<uint8_t>(cls[3])) << 24);
-          }
-          if (child->metaCast(kApfsVolumeClass)) {
-            apfsNodes++;
-          }
-        }
-        if (children == 0) {
-          tagA = tag;
-        } else if (children == 1) {
-          tagB = tag;
-        } else if (children == 2) {
-          tagC = tag;
-        }
-        children++;
-      }
-    }
-    panic("apfs n=%u k=%u %x %x %x", apfsNodes, children, tagA, tagB, tagC);
+    fail("apfsvol", passes);
   }
   // The UUID is what root-matching matches, and the BSD name/major/minor are what IOFindBSDRoot turns
   // into rootdev. They are published by different clients after the media exists, so returning as soon
@@ -2452,7 +2422,28 @@ extern "C" void clover_block_run(void)
     // geometry is proven above, because a manifest without Data has to stop before the root mount
     // rather than mount a root whose /private/var can never be seeded.
     loadApfsKext();
-    whole = publishWindow(osFirst, osSectors, true, &device);
+    // The window holds a GPT whose first entry is the APFS container. Publishing the
+    // container itself keeps the MBR's protective entry from claiming the media: with
+    // the whole window, IOFDiskPartitionScheme attached and no APFS volume appeared.
+    uint32_t osStart = osFirst;
+    uint32_t osCount = osSectors;
+    {
+      static uint32_t gptSector[128];
+      if (clover_emmc_block_read(osFirst + 2, gptSector, 1) == 1) {
+        const uint8_t *entry = reinterpret_cast<const uint8_t *>(gptSector);
+        uint64_t first = 0;
+        uint64_t last = 0;
+        for (unsigned i = 0; i < 8; i++) {
+          first |= static_cast<uint64_t>(entry[32 + i]) << (8 * i);
+          last |= static_cast<uint64_t>(entry[40 + i]) << (8 * i);
+        }
+        if (first != 0 && last >= first && (last - first + 1) <= osSectors) {
+          osStart = osFirst + static_cast<uint32_t>(first);
+          osCount = static_cast<uint32_t>(last - first + 1);
+        }
+      }
+    }
+    whole = publishWindow(osStart, osCount, true, &device);
     prepareApfsBoot(whole);
     IOLog("CloverBlock r159: boot os=%u+%u system=%u+%u data=%u+%u fires=%u deferred=1\n",
           osFirst, osSectors, systemFirst, systemSectors, dataFirst, dataSectors, fires);
