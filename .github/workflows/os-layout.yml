@@ -67,7 +67,7 @@ jobs:
           diskutil apfs list | head -40
           VOL=$(diskutil apfs list -plist | python3 -c "
           import plistlib, sys
-          data = plistlib.load(sys.stdin.buffer)
+          data = plistlib.loads(sys.stdin.buffer.read())
           for container in data.get('Containers', []):
               for volume in container.get('Volumes', []):
                   roles = volume.get('Roles') or []
