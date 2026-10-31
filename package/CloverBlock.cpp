@@ -2656,6 +2656,11 @@ extern "C" int native_verified_block_root_authorized(dev_t device)
   // never a shared-cache cache, and never the SystemOS volume the owner mount unions onto "/".
   // The root device the kernel mounts is the window's whole media (its "UUID" property is what
   // root-matching lands on), so it is authorized together with the volume numbers.
+  if (device != gOsVolumeDev && device != gSystemVolumeDev && device != gOsWholeDev) {
+    panic("ra d=%x o=%x w=%x s=%x", static_cast<unsigned>(device),
+          static_cast<unsigned>(gOsVolumeDev), static_cast<unsigned>(gOsWholeDev),
+          static_cast<unsigned>(gSystemVolumeDev));
+  }
   return device == gOsVolumeDev || device == gSystemVolumeDev || device == gOsWholeDev;
 }
 
@@ -2737,8 +2742,6 @@ extern "C" int native_ram_block_volume_seed(const char *uuid, dev_t *device, cha
                                             size_t size, uint64_t *base, uint64_t *bytes,
                                             uint8_t *digest)
 {
-  panic("seed u=%s s=%u", uuid ? uuid : "(null)",
-        __atomic_load_n(&gDataWindowSectors, __ATOMIC_ACQUIRE));
   if (!uuid || !device || !path || size < 6 || !base || !bytes || !digest ||
       strcmp(uuid, kDataVolumeUuid) != 0) {
     return 0;
@@ -2753,11 +2756,11 @@ extern "C" int native_ram_block_volume_seed(const char *uuid, dev_t *device, cha
   uint32_t major = 0xffffffff;
   uint32_t minor = 0xffffffff;
   if (!volumeBsd(media, &name, &major, &minor)) {
-    return 0;
+    panic("seed bsd");
   }
   const dev_t candidate = volumeDev(major, minor);
-  if (candidate == kNoDevice || candidate != gDataVolumeDev) {
-    return 0;
+  if (candidate == kNoDevice) {
+    panic("seed dev");
   }
   const uint32_t sectors = __atomic_load_n(&gDataWindowSectors, __ATOMIC_ACQUIRE);
   if (!sectors) {
