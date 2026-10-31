@@ -26,6 +26,7 @@ int native_verified_block_manifest_sha384(const char *name, unsigned char *diges
                                           unsigned long long *offset, unsigned long long *bytes);
 int native_ram_block_volume_seed(unsigned char *seed, size_t *bytes);
 int native_ram_block_gpu_addon(const char *path, unsigned long long offset, size_t size);
+void clover_block_run(void);
 
 void
 clover_input_run(void)
@@ -76,6 +77,11 @@ native_ram_block_volume_seed(unsigned char *seed, size_t *bytes)
 	(void)seed;
 	(void)bytes;
 	return 0;
+}
+
+__attribute__((weak)) void
+clover_block_run(void)
+{
 }
 
 __attribute__((weak)) int
