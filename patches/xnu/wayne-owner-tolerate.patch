@@ -1,6 +1,6 @@
 --- a/bsd/kern/kern_exec.c
 +++ b/bsd/kern/kern_exec.c
-@@ -7393,9 +7393,12 @@
+@@ -7393,7 +7393,9 @@
  	int cache_error = native_owner_cache_prepare(p, (user_addr_t)scratch_addr, &init_envp);
  	boot_progress_stage("SystemOS mount returned");
 -	if (cache_error) panic("offline owner SystemOS mount failed: %d", cache_error);
