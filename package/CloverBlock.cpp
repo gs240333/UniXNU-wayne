@@ -2307,7 +2307,7 @@ extern "C" void clover_block_run(void)
   if (!__atomic_compare_exchange_n(&gCloverBlockRan, &expected, 1u, false,
                                    __ATOMIC_ACQUIRE, __ATOMIC_RELAXED)) {
     IOLog("CloverBlock r137: refire n=%u (already ran)\n", fires);
-    panic("CBR refire n=%u ran=%u", fires, gCloverBlockRan);
+    return;
   }
 
   // 1. The PIO path has to be proven before anything claims a device over it.
@@ -2402,7 +2402,6 @@ extern "C" void clover_block_run(void)
     // rather than mount a root whose /private/var can never be seeded.
     whole = publishWindow(osFirst, osSectors, true, &device);
     prepareApfsBoot(whole);
-    panic("CB3 whole=%u", static_cast<unsigned>(gOsWholeDev));
     IOLog("CloverBlock r159: boot os=%u+%u system=%u+%u data=%u+%u fires=%u deferred=1\n",
           osFirst, osSectors, systemFirst, systemSectors, dataFirst, dataSectors, fires);
     return;
@@ -2586,15 +2585,12 @@ static bool cloverBlockIOBSD(void *, void *, IOService *, IONotifier *)
 
 extern "C" void clover_block_request(void)
 {
-  OSSharedPtr<OSDictionary> matching = IOService::resourceMatching("IOBSD");
-  if (!matching) {
-    fail("notify", 0);
-  }
-  IONotifier *notifier = IOService::addMatchingNotification(
-      gIOPublishNotification, matching.get(), &cloverBlockIOBSD, nullptr, nullptr, 0);
-  if (!notifier) {
-    fail("notify", 1);
-  }
+  // wayne: no publish notification. The board's IOKitBSDInit calls
+  // clover_block_run() from IOFindBSDRoot, before it builds the matching
+  // dictionary, and that call is synchronous: the media, the APFS volume and the
+  // md0s1 alias all exist before the root wait starts. The notification used to
+  // run the same body on a config thread, which raced the ten-second wait.
+  (void)cloverBlockIOBSD;
 }
 
 
