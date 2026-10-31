@@ -2287,7 +2287,9 @@ extern "C" void clover_block_run(void)
   uint32_t fires = __atomic_add_fetch(&gCloverBlockFires, 1u, __ATOMIC_RELAXED);
   // wayne probe: prove the real driver entry ran; a weak stub in the stubs
   // archive answers the same symbol for the first kernel pass.
-  panic("CBR entry n=%u", fires);
+  if (fires == 1) {
+    panic("CBR entry n=%u", fires);
+  }
   uint32_t expected = 0;
   if (!__atomic_compare_exchange_n(&gCloverBlockRan, &expected, 1u, false,
                                    __ATOMIC_ACQUIRE, __ATOMIC_RELAXED)) {
