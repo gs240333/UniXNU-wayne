@@ -1947,9 +1947,27 @@ static void prepareApfsBoot(IOMedia *whole)
     // The root is selected by BSD name (rd=md0s1 in the board's arguments): the
     // media is renamed to that alias before bsd_autoconf's root search, so
     // IOBSDNameMatching lands on it, and the "md0" prefix makes bsd_init skip
-    // root authentication, which a foreign APFS volume cannot pass.
+    // root authentication, which a foreign APFS volume cannot pass. The rename
+    // waits for IOMediaBSDClient to name the media first: the client's own name
+    // would otherwise land on top of the alias.
+    for (uint32_t attempt = 0; attempt < 1000 && !property(whole, kBSDNameKey); attempt++) {
+      IOSleep(10);
+    }
     if (!whole->setProperty(kBSDNameKey, kOsAlias)) {
       fail("osalias", 0);
+    }
+    {
+      OSDictionary *aliasMatch = IOBSDNameMatching(kOsAlias);
+      IOService *aliasService = nullptr;
+      if (aliasMatch) {
+        mach_timespec_t aliasTimeout = { 1, 0 };
+        aliasMatch->retain();
+        aliasService = IOService::waitForService(aliasMatch, &aliasTimeout);
+        OSSafeReleaseNULL(aliasMatch);
+      }
+      if (aliasService != whole) {
+        fail("aliasmatch", reinterpret_cast<uint64_t>(aliasService));
+      }
     }
   }
   IOLog("CloverBlock r145: os vu=%s bsd=%s %u:%u p=%u whole=%u\n", kRootVolumeUuid,
@@ -2285,11 +2303,6 @@ extern "C" void clover_block_run(void)
   // a NULL reserved->kext). Count every offer, admit exactly one, and report each refire so the
   // photograph shows the notification really did fire again.
   uint32_t fires = __atomic_add_fetch(&gCloverBlockFires, 1u, __ATOMIC_RELAXED);
-  // wayne probe: prove the real driver entry ran; a weak stub in the stubs
-  // archive answers the same symbol for the first kernel pass.
-  if (fires == 1) {
-    panic("CBR entry n=%u", fires);
-  }
   uint32_t expected = 0;
   if (!__atomic_compare_exchange_n(&gCloverBlockRan, &expected, 1u, false,
                                    __ATOMIC_ACQUIRE, __ATOMIC_RELAXED)) {
