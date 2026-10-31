@@ -346,3 +346,42 @@ clover 仓库里 `append-data-window.py` 引用的 `scripts/prepare-owner-data-f
    证明 kernel 能看到的属性名/大小写与 ADT 一致。
 3. 把 root 选择切到 manifest 路径（`XNU_OWNER_BOOT_MANIFEST` 的真正用法），
    由 `native_verified_block_volume_device()` 直接给出 dev_t。
+
+## root 已挂载，owner mount 两项精确诊断（2026-10-31）
+
+真机证据链（每次都是屏幕上的原文）：
+
+| 步骤 | 结果 |
+| --- | --- |
+| vfs_mountroot | ✅ 成功（`/sbin/launchd` 存在） |
+| SystemOS 查找 `native_verified_block_volume_device` | ✅ 成功（卷 UUID `8846FE78-…` 与代码一致） |
+| SystemOS union 挂载 | ❌ `EAUTH(80)` |
+| Data seed `native_ram_block_volume_seed` | ✅ 成功（`u=2CB9B2EA… s=65456`） |
+| Data 挂载 `mount(apfs, "/private/var", /dev/disk5s1)` | ❌ `ENOENT(2)`，stage=2 |
+
+关键分析（都来自 base 补丁源码，不是猜）：
+
+- `native_owner_data_prepare` 里 `ENOENT` 只有一个来源：`native_ram_block_volume_seed` 返回 0；而探针证明它返回 1，
+  所以真正的 2 来自 `mount()` —— 挂载点 `/private/var` 在该 root 上不存在。
+- 用探针查过：union 之后 `/private/var`、`/System/Volumes` 都返回 2，而 `/sbin/launchd` 存在。
+  这说明它们不是普通目录，而是**未挂载卷的挂载点/firmlink**（iOS 16+ 布局）：
+  `/private/var` ← Data 卷；`/System/Library` ← SystemOS cryptex。
+- SystemOS 的 `EAUTH` 来自 `cache_authorized` 门（`native_union` 等五个条件）或 `mount()` 本身对密封卷的拒绝；
+  该卷是密封 cryptex，非 Apple 硬件上无法通过签名验证。
+
+### 下一步（需要动的三件事）
+
+1. **SystemOS**：密封卷的认证。方向是移植 clover 的 cryptex 处理（`zzyb-native-cryptex-os-view.patch` 已在 base 系列里，
+   但它假设 SystemOS 已挂上）或给 apfs 打跳过 seal 校验的补丁。
+2. **Data 挂载点**：不能在 `/private/var` 上挂（它是 firmlink 目标）。iOS 的标准做法是把 Data 卷挂到
+   `/System/Volumes/Data`，再由 firmlink 解析 `/private/var`；本地试过该路径返回 ENOENT，
+   需要先在镜像上确认 `/System/Volumes` 是否存在
+   （CI 的 `os-layout.yml` 之前挂错了卷，要按 DMG 的 disk 精确选择）。
+3. **ADR**：把 `/private/var` 的目录本身放进镜像也可以（在 userdata 的 OS 窗口里创建空目录），
+   但那需要在 APFS 层改卷，成本高。
+
+### 工具链经验（可复用）
+
+- device 层补丁（`patches/xnu/series`）在 base 系列之后应用，能安全修改
+  `zzz-boot-progress.patch` 已经动过的 `kern_exec.c` 区域。
+- 但每次改完 base 补丁的同一行都要重算 hunk 长度，否则 git 报 corrupt patch。
