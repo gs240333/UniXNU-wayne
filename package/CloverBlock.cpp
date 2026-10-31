@@ -2737,6 +2737,8 @@ extern "C" int native_ram_block_volume_seed(const char *uuid, dev_t *device, cha
                                             size_t size, uint64_t *base, uint64_t *bytes,
                                             uint8_t *digest)
 {
+  panic("seed u=%s s=%u", uuid ? uuid : "(null)",
+        __atomic_load_n(&gDataWindowSectors, __ATOMIC_ACQUIRE));
   if (!uuid || !device || !path || size < 6 || !base || !bytes || !digest ||
       strcmp(uuid, kDataVolumeUuid) != 0) {
     return 0;
