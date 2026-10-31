@@ -40,7 +40,22 @@ def der(data, at):
     return tag, data[at:at + size], at + size
 
 
-def module(name, data):
+def trust_module(name, data):
+    """Return the raw version-2 module inside an IM4P wrapper, or the data itself.
+
+    The IPSW ships both trust caches as personalized IM4P blobs whose fourth DER
+    field is the module; a staged extraction may already be the bare module.
+    """
+    if len(data) > 4 and data[:4] != b'IM4P':
+        tag, sequence, end = der(data, 0)
+        fields, cursor = [], 0
+        while cursor < len(sequence):
+            kind, field, cursor = der(sequence, cursor)
+            fields.append((kind, field))
+        if (tag != 0x30 or end != len(data) or len(fields) < 4 or
+                fields[0][1] != b'IM4P'):
+            raise SystemExit(f'{name}: an IM4P wrapper was expected')
+        data = fields[-1][1]
     if len(data) < 24:
         raise SystemExit(f'{name}: shorter than a version-2 module header')
     version = struct.unpack_from('<I', data)[0]
@@ -75,8 +90,8 @@ def main():
             fields[0][1] != b'IM4P'):
         raise SystemExit('Cryptex1,SystemTrustCache is not the expected IM4P')
 
-    static, static_entries = module('static', STATIC.read_bytes())
-    system, system_entries = module('system', fields[3][1])
+    static, static_entries = trust_module('static', STATIC.read_bytes())
+    system, system_entries = trust_module('system', original)
 
     bundle = struct.pack('<3I', 2, 12, 12 + len(static)) + static + system
     out = ROOT / 'build/wayne-trust'
