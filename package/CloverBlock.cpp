@@ -2307,7 +2307,7 @@ extern "C" void clover_block_run(void)
   if (!__atomic_compare_exchange_n(&gCloverBlockRan, &expected, 1u, false,
                                    __ATOMIC_ACQUIRE, __ATOMIC_RELAXED)) {
     IOLog("CloverBlock r137: refire n=%u (already ran)\n", fires);
-    return;
+    panic("CBR refire n=%u ran=%u", fires, gCloverBlockRan);
   }
 
   // 1. The PIO path has to be proven before anything claims a device over it.
@@ -2402,6 +2402,7 @@ extern "C" void clover_block_run(void)
     // rather than mount a root whose /private/var can never be seeded.
     whole = publishWindow(osFirst, osSectors, true, &device);
     prepareApfsBoot(whole);
+    panic("CB3 whole=%u", static_cast<unsigned>(gOsWholeDev));
     IOLog("CloverBlock r159: boot os=%u+%u system=%u+%u data=%u+%u fires=%u deferred=1\n",
           osFirst, osSectors, systemFirst, systemSectors, dataFirst, dataSectors, fires);
     return;
