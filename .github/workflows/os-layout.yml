@@ -1,0 +1,94 @@
+name: OS image layout
+
+# Answer filesystem questions about the target OS image without a phone: attach
+# the IPSW's OS disk image, mount the System-role volume read-only and list what
+# the root actually contains.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  layout:
+    runs-on: macos-26
+    timeout-minutes: 90
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+      DEFCONFIG: wayne_defconfig
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: UniXNU/UniXNU
+          path: UniXNU
+          submodules: false
+
+      - uses: actions/checkout@v4
+        with:
+          path: device
+
+      - uses: actions/checkout@v4
+        with:
+          repository: gs240333/UniXNU-sdm660-common
+          path: UniXNU-sdm660-common
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install host tools
+        run: |
+          brew install llvm lld mtools dtc unifdef
+          echo "$(brew --prefix llvm)/bin" >> "$GITHUB_PATH"
+
+      - name: Select the device
+        working-directory: UniXNU
+        run: |
+          cat > ../device/local.toml <<'EOF'
+          [[source]]
+          kind = "soc"
+          name = "sdm660"
+          local = "../UniXNU-sdm660-common"
+          EOF
+          chmod +x unixnu
+          ./unixnu defconfig "$DEFCONFIG" -D ../device
+
+      - name: Extract the OS image
+        working-directory: UniXNU
+        run: ./unixnu ipsw fetch OS -D ../device
+
+      - name: Mount the system volume and list the root
+        working-directory: UniXNU
+        run: |
+          set -eux
+          DMG=$(find . -name '044-76040-038.dmg' | head -1)
+          echo "dmg: $DMG"
+          hdiutil attach -readonly -nobrowse -noautoopen "$DMG"
+          diskutil apfs list | head -40
+          VOL=$(diskutil apfs list -plist | python3 -c "
+          import plistlib, sys
+          data = plistlib.load(sys.stdin.buffer)
+          for container in data.get('Containers', []):
+              for volume in container.get('Volumes', []):
+                  roles = volume.get('Roles') or []
+                  name = volume.get('Name') or ''
+                  if 'System' in roles or 'DawnUpdate' in name:
+                      print(volume.get('DeviceIdentifier') or volume.get('Device') or '')
+          " | head -1)
+          echo "system volume: $VOL"
+          if [ -z "$VOL" ]; then echo "no system volume found"; exit 1; fi
+          diskutil mount "$VOL"
+          MP=$(diskutil info "$VOL" | awk -F': *' '/Mount Point/ {print $2}')
+          echo "mount point: $MP"
+          echo "=== root ==="
+          ls -la "$MP" || true
+          echo "=== /private ==="
+          ls -la "$MP/private" 2>&1 || true
+          echo "=== /private/var ==="
+          ls -la "$MP/private/var" 2>&1 || true
+          echo "=== /System ==="
+          ls -la "$MP/System" 2>&1 || true
+          echo "=== /System/Library ==="
+          ls -la "$MP/System/Library" 2>&1 | head -5 || true
+          echo "=== firmlinks ==="
+          cat "$MP/usr/share/firmlinks" 2>&1 || echo "no firmlinks file"
