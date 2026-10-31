@@ -2750,7 +2750,8 @@ extern "C" int native_ram_block_volume_seed(const char *uuid, dev_t *device, cha
   path[0] = 0;
   IOMedia *media = publishDataVolume();
   if (!media) {
-    return 0;
+    panic("seed publish f=%u s=%u", __atomic_load_n(&gDataWindowFirst, __ATOMIC_ACQUIRE),
+          __atomic_load_n(&gDataWindowSectors, __ATOMIC_ACQUIRE));
   }
   const char *name = nullptr;
   uint32_t major = 0xffffffff;
